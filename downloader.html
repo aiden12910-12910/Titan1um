@@ -6,32 +6,41 @@
 <style>
   body{margin:0;padding:20px;background:#0a0a0a;color:#ddd;font-family:monospace;font-size:13px;line-height:1.7}
   h1{font-size:16px;margin:0 0 12px;color:#eee}
-  h2{font-size:14px;margin:18px 0 8px;color:#ccc}
+  h2{font-size:14px;margin:18px 0 8px;color:#ccc; border-bottom: 1px solid #333; padding-bottom: 4px;}
   a{color:#4a9eff;text-decoration:none}
   a:hover{text-decoration:underline}
   .box{background:#000;border:1px solid #333;padding:12px;margin:12px 0}
   .hint{color:#888;font-size:12px}
+  .warning{color:#ffaa00; font-size:12px;}
   code{background:#1a1a1a;padding:2px 6px;border-radius:3px}
+  ul { padding-left: 20px; margin: 8px 0; }
 </style>
 </head>
 <body>
-<h1>Titan1um - Get Windows 95 Image</h1>
+<h1>Titan1um - Images & Tools</h1>
 
+<h2>1. Download Official Images</h2>
 <div class="box">
-  <p>Please download the image file from the GitHub Release page:</p>
-  <p><a href="https://github.com/aiden12910-12910/Windows95/releases/tag/img" target="_blank" rel="noopener">Open Release page →</a></p>
-  <p class="hint">Filename: <code>windows95.img</code>, Size approx 1 GB. After downloading, return to this page and select the file under "HDA".</p>
+  <p>Go to the GitHub Release page to find all compatible images prepared by the author:</p>
+  <p><a href="https://github.com/aiden12910-12910/Windows95/releases/tag/img" target="_blank" rel="noopener">Open Release page (Tag: img) →</a></p>
+  <p class="hint">Find the image you need, download it, then return here to select it as HDA.</p>
 </div>
 
+<h2>2. Image Requirements (If you bring your own)</h2>
 <div class="box">
-  <p>If the link above doesn't work, download the attachment directly:</p>
-  <p><a href="https://github.com/aiden12910-12910/Windows95/releases/download/img/windows95.img" target="_blank" rel="noopener">Direct download →</a></p>
+  <p>If you want to use your own <code>.img</code> files, they must meet specific requirements for v86:</p>
+  
+  <ul>
+    <li><strong>Windows 95 / 98</strong>: Standard installation. Do not allocate more than 512MB RAM. Image size under 1GB is recommended.</li>
+    <li><strong>Windows 2000 / XP</strong>: <span class="warning">Must be pre-installed using QEMU and switched to "Standard PC" in Device Manager.</span> Otherwise, v86 will throw a call stack error or crash. Do not use the original ISO directly.</li>
+    <li><strong>Linux (Light)</strong>: Use 32-bit (i386) distributions like Alpine or Damn Small Linux (DSL). Desktop environments (GNOME/KDE) are not recommended. Use CLI only.</li>
+    <li><strong>DOS / KolibriOS</strong>: Can usually boot directly from standard floppy or hard disk images.</li>
+  </ul>
 </div>
 
-<h2>Folder to ISO (Subdirectories supported)</h2>
-
+<h2>3. Folder to ISO Converter</h2>
 <div class="box">
-  <p>Select a folder (all subdirectories and files will be recursively included) to generate an <code>.iso</code>, then select it as a CD in the Titan1um page.</p>
+  <p>Select a folder containing old games or software (subdirectories supported), generate an <code>.iso</code>, and mount it as a CD.</p>
   <p>
     <input type="file" id="iso_dir" webkitdirectory directory multiple style="color:#ddd">
     <button id="btn_build_iso" type="button" style="padding:4px 12px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace">Build ISO</button>
@@ -39,12 +48,6 @@
   </p>
   <div id="iso_log" class="hint">Waiting for folder selection</div>
 </div>
-
-<p class="hint">
-  Why can't I download the image directly here?<br>
-  GitHub Release and Hugging Face download links don't return CORS headers, so browser JavaScript cannot read them cross-origin.<br>
-  Manually download it locally, then load it via the Titan1um interface to completely bypass cross-origin restrictions.
-</p>
 
 <script>
 var SECTOR = 2048;
