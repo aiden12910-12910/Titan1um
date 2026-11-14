@@ -8,12 +8,11 @@
   h1{font-size:16px;margin:0 0 12px;color:#eee}
   .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
   label{color:#888}
-  select,input[type=text]{padding:5px 8px;background:#1a1a1a;color:#ddd;border:1px solid #444;font-family:monospace;font-size:13px}
-  select{min-width:280px}
+  select{padding:5px 8px;background:#1a1a1a;color:#ddd;border:1px solid #444;font-family:monospace;font-size:13px;min-width:300px}
   button{padding:5px 14px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace;font-size:13px}
   button:disabled{opacity:.4;cursor:not-allowed}
   #file_list{background:#000;border:1px solid #333;padding:8px;max-height:120px;overflow:auto;margin:6px 0 10px;font-size:12px;line-height:1.6}
-  #file_list .file_item{padding:2px 4px;cursor:pointer;border-radius:3px}
+  #file_list .file_item{padding:3px 6px;cursor:pointer;border-radius:3px}
   #file_list .file_item:hover{background:#1a2a3a}
   #file_list .file_item.selected{background:#1e3a5f;color:#fff}
   #bar{height:8px;background:#333;border-radius:4px;overflow:hidden;margin:10px 0}
@@ -28,10 +27,9 @@
 <div class="row">
   <label>仓库:</label>
   <select id="repo_select"></select>
-  <button id="btn_refresh" type="button">刷新文件列表</button>
 </div>
 
-<div id="file_list">选择仓库后点“刷新文件列表”</div>
+<div id="file_list">点仓库下拉，文件列表会显示在这里</div>
 
 <div class="row">
   <button id="btn_download" type="button" disabled>下载选中文件</button>
@@ -42,19 +40,18 @@
 <div id="log"></div>
 
 <p class="hint">
-  仓库列表固定，用户不能随意输入其他仓库。<br>
-  下载走 HF resolve 直链；如果浏览器报 CORS 错误，说明 HF CDN 不允许跨域读取，需要 Worker 代理。
+  文件列表硬编码，不走 HF API，避免 CORS 和大小写 404。<br>
+  下载走 HF resolve 直链；如果仍报 CORS，需要 Worker 代理。
 </p>
 
 <script>
-// ---- 固定仓库列表（你只改这里） ----
-var HF_REPOS = [
-  "aiden12910/Windows-web-sim-file-support"
-];
+// ---- 硬编码：仓库 → 文件列表（你以后加文件只改这里） ----
+var HF_REPOS = {
+  "Aiden12910/Windows-web-sim-file-support": ["windows95.img"]
+};
 
 var repoSelect = document.getElementById("repo_select");
 var fileListEl = document.getElementById("file_list");
-var btnRefresh = document.getElementById("btn_refresh");
 var btnDownload = document.getElementById("btn_download");
 var btnSave = document.getElementById("btn_save");
 var barFill = document.getElementById("bar-fill");
@@ -73,61 +70,54 @@ function setProgress(pct){
 }
 
 // ---- 填充仓库下拉 ----
-HF_REPOS.forEach(function(r){
+Object.keys(HF_REPOS).forEach(function(r){
   var opt = document.createElement("option");
   opt.value = r;
   opt.textContent = r;
   repoSelect.appendChild(opt);
 });
 
-// ---- 刷新文件列表 ----
-btnRefresh.onclick = async function(){
-  var repo = repoSelect.value;
-  if(!repo){ log("请选择仓库"); return; }
+// ---- 仓库切换时渲染文件列表 ----
+repoSelect.onchange = function(){
+  renderFileList(repoSelect.value);
+};
+
+function renderFileList(repo){
   selectedFile = null;
   downloadedBlob = null;
   btnDownload.disabled = true;
   btnSave.disabled = true;
-  fileListEl.textContent = "加载中...";
   setProgress(0);
-  log("拉取文件列表: " + repo);
-
-  try{
-    var r = await fetch("https://huggingface.co/api/models/" + repo);
-    if(!r.ok) throw new Error("HTTP " + r.status);
-    var data = await r.json();
-    var files = (data.siblings || []).map(function(s){ return s.rfilename; });
-    if(!files.length){
-      fileListEl.textContent = "该仓库没有文件";
-      return;
-    }
-    fileListEl.innerHTML = "";
-    files.forEach(function(f){
-      var div = document.createElement("div");
-      div.className = "file_item";
-      div.textContent = f;
-      div.onclick = function(){
-        // 取消其他选中
-        Array.prototype.forEach.call(fileListEl.children, function(c){ c.classList.remove("selected"); });
-        div.classList.add("selected");
-        selectedFile = f;
-        btnDownload.disabled = false;
-        log("选中: " + f);
-      };
-      fileListEl.appendChild(div);
-    });
-    log("共 " + files.length + " 个文件，点一个选中");
-  }catch(e){
-    fileListEl.textContent = "加载失败";
-    log("失败: " + e.message);
-    log("如果提示 CORS，说明 HF API 不允许浏览器直接访问，需要 Worker 代理。");
+  var files = HF_REPOS[repo] || [];
+  fileListEl.innerHTML = "";
+  if(!files.length){
+    fileListEl.textContent = "该仓库没有预设文件";
+    return;
   }
-};
+  files.forEach(function(f){
+    var div = document.createElement("div");
+    div.className = "file_item";
+    div.textContent = f;
+    div.onclick = function(){
+      Array.prototype.forEach.call(fileListEl.children, function(c){ c.classList.remove("selected"); });
+      div.classList.add("selected");
+      selectedFile = f;
+      btnDownload.disabled = false;
+      log("选中: " + f);
+    };
+    fileListEl.appendChild(div);
+  });
+  log("仓库 " + repo + " 有 " + files.length + " 个文件，点一个选中");
+}
+
+// 初始化
+renderFileList(repoSelect.value);
 
 // ---- 下载选中文件 ----
 btnDownload.onclick = async function(){
   if(!selectedFile){ log("请先选中一个文件"); return; }
   var repo = repoSelect.value;
+  // 注意：路径用原始大小写，HF 对用户名大小写敏感
   var url = "https://huggingface.co/" + repo + "/resolve/main/" + encodeURIComponent(selectedFile);
   log("开始下载: " + url);
   btnDownload.disabled = true;
@@ -150,9 +140,8 @@ btnDownload.onclick = async function(){
       chunks.push(value);
       received += value.length;
       if(total > 0){
-        var pct = received / total * 100;
-        setProgress(pct);
-        if(received - lastLog > 1024 * 1024){  // 每 1MB 打一次日志
+        setProgress(received / total * 100);
+        if(received - lastLog > 1024 * 1024){
           log("已下载 " + (received/1024/1024).toFixed(1) + " / " + (total/1024/1024).toFixed(1) + " MB");
           lastLog = received;
         }
@@ -167,7 +156,7 @@ btnDownload.onclick = async function(){
     btnSave.disabled = false;
   }catch(e){
     log("下载失败: " + e.message);
-    log("常见原因：HF CDN 跨域限制、网络中断。");
+    log("如果是 CORS 错误，说明 HF CDN 不允许跨域，需要 Worker 代理。");
   }finally{
     btnDownload.disabled = false;
   }
