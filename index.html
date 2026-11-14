@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Titan1um - Web-based Emulator</title>
+<title>Titan1um - Windows 95 Emulator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   html, body {
@@ -26,7 +26,7 @@
   #status { color: #888; margin-left: auto; }
   
   #dl_toggle { padding: 3px 10px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; }
-  #dl_panel { display: none; background: #0a0a0a; border-bottom: 1px solid #333; flex-shrink: 0; height: 340px; }
+  #dl_panel { display: none; background: #0a0a0a; border-bottom: 1px solid #333; flex-shrink: 0; height: 400px; }
   #dl_panel iframe { width: 100%; height: 100%; border: 0; display: block; }
   
   #screen_wrap {
@@ -47,6 +47,10 @@
   body.is-fullscreen #screen_wrap { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; }
   
   .cd-group { display: flex; align-items: center; gap: 4px; border-left: 1px solid #333; padding-left: 8px; margin-left: 4px; }
+  .hidden-file { display: none; }
+  .file-btn {
+    padding: 3px 8px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; font-family: monospace;
+  }
 </style>
 </head>
 <body>
@@ -57,28 +61,32 @@
     <label>System:</label>
     <select id="os_preset">
       <option value="win95">Windows 95 / 98</option>
-      <option value="linux">Linux (CLI / Light)</option>
+      <option value="linux">Linux (CLI)</option>
       <option value="dos">DOS / KolibriOS</option>
     </select>
 
-    <label>HDA:</label><input type="file" id="hda_file" accept=".img,.iso,.bin">
+    <label>HDA:</label>
+    <button class="file-btn" onclick="document.getElementById('hda_file').click()">Choose File</button>
+    <input type="file" id="hda_file" class="hidden-file" accept=".img,.iso,.bin">
+    <span id="hda_name" style="color:#888; font-size:11px; max-width:80px; overflow:hidden; text-overflow:ellipsis;">(none)</span>
+
     <label>RAM:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
     
     <!-- CD 1 槽位 -->
     <div class="cd-group">
       <label>CD 1:</label>
-      <input type="file" id="cd1_file" accept=".iso" style="display:none">
-      <button id="btn_cd1_inject">Inject</button>
+      <button id="btn_cd1_inject" class="file-btn">Inject</button>
       <button id="btn_cd1_eject" disabled>Eject</button>
+      <input type="file" id="cd1_file" class="hidden-file" accept=".iso">
       <span id="cd1_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
     </div>
 
     <!-- CD 2 槽位 -->
     <div class="cd-group">
       <label>CD 2:</label>
-      <input type="file" id="cd2_file" accept=".iso" style="display:none">
-      <button id="btn_cd2_inject">Inject</button>
+      <button id="btn_cd2_inject" class="file-btn">Inject</button>
       <button id="btn_cd2_eject" disabled>Eject</button>
+      <input type="file" id="cd2_file" class="hidden-file" accept=".iso">
       <span id="cd2_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
     </div>
 
@@ -87,11 +95,11 @@
     <button id="btn_stop" disabled>Stop</button>
     <button id="btn_restart" disabled>Restart</button>
     <button id="btn_save" disabled>Save State</button>
-    <input type="file" id="state_file" accept=".bin" style="display:none">
+    <input type="file" id="state_file" class="hidden-file" accept=".bin">
     <button id="btn_load" disabled>Load State</button>
     
     <button id="btn_fullscreen">Theater Mode</button>
-    <button id="dl_toggle">Images & ISOs ▼</button>
+    <button id="dl_toggle">Images & Games ▼</button>
     <span id="status">Ready</span>
   </div>
 
@@ -120,6 +128,7 @@ var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
 var btnFullscreen = document.getElementById("btn_fullscreen");
 var hdaInput = document.getElementById("hda_file");
+var hdaName = document.getElementById("hda_name");
 var memInput = document.getElementById("mem_size");
 var stateInput = document.getElementById("state_file");
 var presetSelect = document.getElementById("os_preset");
@@ -173,7 +182,7 @@ cd1Input.onchange = function() {
   currentCd1 = cd1Input.files[0];
   updateCdUI();
   setStatus("CD 1 Injected: " + currentCd1.name);
-  if(currentHda) buildEmulator(true); // 重建并自动启动
+  if(currentHda) buildEmulator(true);
 };
 btnCd1Eject.onclick = function() {
   currentCd1 = null;
@@ -229,7 +238,7 @@ presetSelect.addEventListener("change", function(e){
 dlToggle.onclick = function(){
   var isOpen = dlPanel.style.display === "block";
   dlPanel.style.display = isOpen ? "none" : "block";
-  dlToggle.textContent = isOpen ? "Images & ISOs ▼" : "Images & ISOs ▲";
+  dlToggle.textContent = isOpen ? "Images & Games ▼" : "Images & Games ▲";
 };
 
 // ---- 内存持久化 ----
@@ -247,6 +256,7 @@ loadMemSetting();
 hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
+  hdaName.textContent = currentHda.name;
   setStatus("Selected HDA: " + currentHda.name);
   buildEmulator(false);
 });
@@ -278,10 +288,9 @@ function buildEmulator(autoStart){
   if (currentCd2) cds.push({ buffer: currentCd2 });
   
   if (cds.length > 0) {
-    // v86 支持 cdrom 或 cdroms 数组
     opts.cdrom = cds[0];
     if (cds.length > 1) {
-      opts.cdroms = cds; // 某些版本的 v86 支持多 CD
+      opts.cdroms = cds;
     }
   }
 
