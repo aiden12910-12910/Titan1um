@@ -31,7 +31,7 @@
   <button id="btn_save" disabled>下载 State</button>
   <input type="file" id="state_file" accept=".bin" style="display:none">
   <button id="btn_load" disabled>加载 State</button>
-  <button id="dl_toggle">HF 下载器 ▼</button>
+  <button id="dl_toggle">获取镜像 ▼</button>
   <span id="status">就绪</span>
 </div>
 
@@ -82,7 +82,7 @@ function destroyEmulator(){
 dlToggle.onclick = function(){
   var open = dlPanel.style.display === "block";
   dlPanel.style.display = open ? "none" : "block";
-  dlToggle.textContent = open ? "HF 下载器 ▼" : "HF 下载器 ▲";
+  dlToggle.textContent = open ? "获取镜像 ▼" : "获取镜像 ▲";
   // 面板展开时把屏幕区域往下推，避免被 iframe 遮住
   document.getElementById("screen_wrap").style.top = open ? "42px" : "382px";
 };
