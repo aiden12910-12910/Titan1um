@@ -14,6 +14,7 @@
     display: flex; gap: 6px; align-items: center; padding: 6px 10px;
     background: #111; border-bottom: 1px solid #333;
     flex-wrap: wrap; font-size: 12px; flex-shrink: 0;
+    transition: transform 0.3s ease, opacity 0.3s ease;
   }
   #topbar button, #topbar select, #topbar input[type=number] {
     padding: 3px 8px; background: #222; color: #ddd;
@@ -42,6 +43,16 @@
     display: block; background: #000;
     max-width: 100%; max-height: 100%; object-fit: contain;
   }
+
+  /* 全屏模式下的特殊样式 */
+  body.is-fullscreen #topbar {
+    display: none; /* 隐藏顶栏 */
+  }
+  body.is-fullscreen #screen_wrap {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    z-index: 9999;
+  }
 </style>
 </head>
 <body>
@@ -52,8 +63,8 @@
     <label>System:</label>
     <select id="os_preset">
       <option value="win95">Windows 95 / 98</option>
-      <option value="win2k">Windows 2000 (Standard PC)</option>
-      <option value="winxp">Windows XP (Standard PC, Very Slow)</option>
+      <option value="win2k" disabled>Windows 2000 (N/A)</option>
+      <option value="winxp" disabled>Windows XP (N/A)</option>
       <option value="linux">Linux (CLI / Light)</option>
       <option value="dos">DOS / KolibriOS</option>
     </select>
@@ -70,6 +81,8 @@
     <input type="file" id="state_file" accept=".bin" style="display:none">
     <button id="btn_load" disabled>Load State</button>
     
+    <button id="btn_fullscreen">Theater Mode</button>
+
     <button id="dl_toggle">Images & ISOs ▼</button>
     <span id="status">Ready</span>
   </div>
@@ -90,12 +103,14 @@
 var emulator = null;
 var statusEl = document.getElementById("status");
 var screenContainer = document.getElementById("screen_container");
+var screenWrap = document.getElementById("screen_wrap");
 var btnStart = document.getElementById("btn_start");
 var btnPause = document.getElementById("btn_pause");
 var btnStop = document.getElementById("btn_stop");
 var btnRestart = document.getElementById("btn_restart");
 var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
+var btnFullscreen = document.getElementById("btn_fullscreen");
 var hdaInput = document.getElementById("hda_file");
 var cdInput = document.getElementById("cd_file");
 var memInput = document.getElementById("mem_size");
@@ -108,11 +123,8 @@ var dlPanel = document.getElementById("dl_panel");
 var currentHda = null;
 var currentCd = null;
 
-// ---- 系统预设配置 ----
 var PROFILES = {
   win95: { mem: 128, acpi: false },
-  win2k: { mem: 256, acpi: false },
-  winxp: { mem: 512, acpi: false },
   linux: { mem: 256, acpi: true },
   dos:   { mem: 64,  acpi: false }
 };
@@ -128,13 +140,42 @@ function destroyEmulator(){
   emulator = null;
 }
 
+// ---- 全屏 / Theater Mode ----
+btnFullscreen.onclick = function() {
+  if (!document.fullscreenElement) {
+    // 进入全屏
+    if (screenWrap.requestFullscreen) {
+      screenWrap.requestFullscreen();
+    } else if (screenWrap.webkitRequestFullscreen) { /* Safari */
+      screenWrap.webkitRequestFullscreen();
+    } else if (screenWrap.msRequestFullscreen) { /* IE11 */
+      screenWrap.msRequestFullscreen();
+    }
+  } else {
+    // 退出全屏
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    }
+  }
+};
+
+// 监听全屏状态变化，自动切换 CSS 类
+document.addEventListener("fullscreenchange", function() {
+  if (document.fullscreenElement) {
+    document.body.classList.add("is-fullscreen");
+    setStatus("Theater Mode: ON (Press Esc to exit)");
+  } else {
+    document.body.classList.remove("is-fullscreen");
+    setStatus("Theater Mode: OFF");
+  }
+});
+
 // ---- 预设切换 ----
 presetSelect.addEventListener("change", function(e){
   var key = e.target.value;
   currentProfile = PROFILES[key] || PROFILES.win95;
   memInput.value = currentProfile.mem;
   setStatus("Profile: " + key + " (RAM: " + currentProfile.mem + "MB)");
-  // 如果已经选了 HDA，立刻重建模拟器以应用新配置
   if(currentHda) buildEmulator(false);
 });
 
@@ -145,7 +186,7 @@ dlToggle.onclick = function(){
   dlToggle.textContent = isOpen ? "Images & ISOs ▼" : "Images & ISOs ▲";
 };
 
-// ---- 内存持久化 (在预设基础上允许微调) ----
+// ---- 内存持久化 ----
 function loadMemSetting(){
   var v = localStorage.getItem("titan1um_mem");
   if(v) memInput.value = v;
@@ -179,7 +220,6 @@ function buildEmulator(autoStart){
   
   screenContainer.innerHTML = '<div style="white-space:pre;font:14px monospace;line-height:14px"></div><canvas style="display:none"></canvas>';
   
-  // 优先使用用户手动输入的值，如果没有则使用预设的值
   var memMB = parseInt(memInput.value, 10) || currentProfile.mem;
 
   var opts = {
