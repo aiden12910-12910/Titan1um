@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>获取 Windows 95 镜像与 ISO 转换</title>
+<title>Titan1um - 获取镜像与 ISO 转换</title>
 <style>
   body{margin:0;padding:20px;background:#0a0a0a;color:#ddd;font-family:monospace;font-size:13px;line-height:1.7}
   h1{font-size:16px;margin:0 0 12px;color:#eee}
@@ -15,7 +15,7 @@
 </style>
 </head>
 <body>
-<h1>获取 Windows 95 镜像</h1>
+<h1>Titan1um - 获取 Windows 95 镜像</h1>
 
 <div class="box">
   <p>请从 GitHub Release 页面下载镜像文件：</p>
@@ -31,7 +31,7 @@
 <h2>文件夹转 ISO（支持子目录，在 Win95 里当 CD 用）</h2>
 
 <div class="box">
-  <p>选择一个文件夹（会递归包含所有子目录和文件），生成一个 <code>.iso</code>，然后在 v86 页面里把它选为 CD。</p>
+  <p>选择一个文件夹（会递归包含所有子目录和文件），生成一个 <code>.iso</code>，然后在 Titan1um 页面里把它选为 CD。</p>
   <p>
     <input type="file" id="iso_dir" webkitdirectory directory multiple style="color:#ddd">
     <button id="btn_build_iso" type="button" style="padding:4px 12px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace">生成 ISO</button>
@@ -43,10 +43,11 @@
 <p class="hint">
   为什么不能在这里直接下载镜像？<br>
   GitHub Release 和 Hugging Face 的下载链接都不返回 CORS 头，浏览器里的 JavaScript 无法跨域读取。<br>
-  手动下载到本地后，通过 v86 页面的文件选择框加载，完全绕开跨域限制。
+  手动下载到本地后，通过 Titan1um 的界面加载，完全绕开跨域限制。
 </p>
 
 <script>
+// (JavaScript 代码完全保持不变)
 var SECTOR = 2048;
 var isoBlob = null;
 var isoName = "data.iso";
@@ -62,13 +63,11 @@ function writeU16(view, off, v){ view.setUint16(off, v, true); view.setUint16(of
 function writeU32(view, off, v){ view.setUint32(off, v, true); view.setUint32(off + 4, v, false); }
 function fillSpaces(out, off, len){ for(var i = 0; i < len; i++) out[off + i] = 0x20; }
 
-// ---- 目录树 ----
 function buildTree(files){
   var root = { name: "", children: {}, files: [] };
   files.forEach(function(f){
     var path = f.webkitRelativePath || f.name;
     var parts = path.split("/").filter(Boolean);
-    // 去掉最顶层文件夹名，保留其内容作为根
     if(parts.length > 1) parts = parts.slice(1);
     var cur = root;
     for(var i = 0; i < parts.length - 1; i++){
@@ -81,20 +80,18 @@ function buildTree(files){
   return root;
 }
 
-// 计算目录项数量（. 和 .. + 子目录 + 文件）
 function countDirRecords(dir){
   var n = 2;
   Object.keys(dir.children).forEach(function(k){ n += 1 + countDirRecords(dir.children[k]); });
   n += dir.files.length;
   return n;
 }
-// 计算目录所需扇区数
+
 function dirSectors(dir){
   var records = [];
-  // 先遍历收集所有记录长度
   function walk(d){
-    records.push(34); // .
-    records.push(34); // ..
+    records.push(34);
+    records.push(34);
     Object.keys(d.children).forEach(function(k){ records.push(34 + k.length + (k.length % 2 === 0 ? 1 : 0)); walk(d.children[k]); });
     d.files.forEach(function(f){ records.push(34 + f.name.length + (f.name.length % 2 === 0 ? 1 : 0)); });
   }
@@ -103,7 +100,6 @@ function dirSectors(dir){
   return Math.max(1, Math.ceil(total / SECTOR));
 }
 
-// 写目录记录
 function writeDirRecord(out, view, off, sector, size, isDir, name, nameLen){
   var nb = name ? new TextEncoder().encode(name.toUpperCase()) : new Uint8Array([0]);
   var recLen = 33 + nb.length + (nb.length % 2 === 0 ? 1 : 0);
@@ -125,7 +121,6 @@ function writeDirRecord(out, view, off, sector, size, isDir, name, nameLen){
 async function buildIso(files){
   var root = buildTree(files);
 
-  // 收集所有文件数据
   var fileEntries = [];
   async function collect(dir){
     for(var i = 0; i < dir.files.length; i++){
@@ -138,7 +133,6 @@ async function buildIso(files){
   }
   await collect(root);
 
-  // 分配扇区：16 PVD, 17 终止符, 18 根目录, 然后子目录，然后文件数据
   var rootSec = 18;
   var rootSectors = dirSectors(root);
   var cur = 18 + rootSectors;
@@ -172,7 +166,6 @@ async function buildIso(files){
   var out = new Uint8Array(totalBytes);
   var view = new DataView(out.buffer);
 
-  // ---- PVD ----
   var pvd = 16 * SECTOR;
   view.setUint8(pvd, 0x01);
   out.set([0x43,0x44,0x30,0x30,0x31], pvd + 1);
@@ -197,36 +190,29 @@ async function buildIso(files){
   fillSpaces(out, pvd + 813, 17);
   fillSpaces(out, pvd + 830, 17);
 
-  // ---- 终止符 ----
   var term = 17 * SECTOR;
   view.setUint8(term, 0xFF);
   out.set([0x43,0x44,0x30,0x30,0x31], term + 1);
 
-  // ---- 写目录 ----
   function writeDir(dir, offset){
     var secInfo = dirSectorMap.get(dir);
     var pos = offset;
-    // .
     pos += writeDirRecord(out, view, pos, secInfo.sector, secInfo.sectors * SECTOR, true, "\0", 1);
-    // ..
     var parent = dir.parent || dir;
     var psec = dirSectorMap.get(parent);
     pos += writeDirRecord(out, view, pos, psec.sector, psec.sectors * SECTOR, true, "\1", 1);
-    // 子目录
     var keys = Object.keys(dir.children);
     keys.forEach(function(k){
       var child = dir.children[k];
       var ci = dirSectorMap.get(child);
       pos += writeDirRecord(out, view, pos, ci.sector, ci.sectors * SECTOR, true, k, k.length);
     });
-    // 文件
     dir.files.forEach(function(f){
       var fe = fileSectorMap.get(f.name);
       pos += writeDirRecord(out, view, pos, fe.sector, fe.data.length, false, f.name, f.name.length);
     });
   }
 
-  // 设置 parent 指针
   function setParents(dir, parent){
     dir.parent = parent;
     Object.keys(dir.children).forEach(function(k){ setParents(dir.children[k], dir); });
@@ -244,7 +230,6 @@ async function buildIso(files){
   }
   writeSubdirs(root);
 
-  // ---- 写文件数据 ----
   fileEntries.forEach(function(e){
     out.set(e.data, e.sector * SECTOR);
   });
@@ -252,7 +237,6 @@ async function buildIso(files){
   return new Blob([out], { type: "application/x-iso9660-image" });
 }
 
-// ---- 事件 ----
 btnBuildIso.onclick = async function(){
   if(!isoDirInput.files.length){ isoLogSet("请先选择文件夹"); return; }
   btnBuildIso.disabled = true;
