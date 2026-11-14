@@ -8,7 +8,162 @@
   #topbar{display:flex;gap:6px;align-items:center;padding:6px 10px;background:#111;border-bottom:1px solid #333;flex-wrap:wrap;font-size:12px}
   #topbar button,#topbar select,#topbar input[type=number]{padding:3px 8px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-size:12px}
   #topbar button:disabled{opacity:.4;cursor:not-allowed}
+  #topbar label{color:#888}<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>v86 模拟器</title>
+<style>
+  html,body{margin:0;padding:0;background:#000;color:#ccc;font-family:monospace;height:100%;overflow:hidden}
+  #topbar{display:flex;gap:6px;align-items:center;padding:6px 10px;background:#111;border-bottom:1px solid #333;flex-wrap:wrap;font-size:12px}
+  #topbar button,#topbar select,#topbar input[type=number]{padding:3px 8px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-size:12px}
+  #topbar button:disabled{opacity:.4;cursor:not-allowed}
   #topbar label{color:#888}
+  #status{color:#888;margin-left:auto}
+  #screen_wrap{position:absolute;top:42px;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:#000}
+  #screen_container{white-space:pre;font:14px monospace;line-height:14px}
+  #screen_container>div{white-space:pre;font:14px monospace;line-height:14px}
+  #screen_container>canvas{display:block;background:#000}
+</style>
+</head>
+<body>
+<div id="topbar">
+  <label>HDA (镜像):</label><input type="file" id="hda_file" accept=".img,.iso,.bin">
+  <label>CD (可选):</label><input type="file" id="cd_file" accept=".iso">
+  <label>内存:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
+  <button id="btn_start" disabled>启动</button>
+  <button id="btn_pause" disabled>暂停</button>
+  <button id="btn_stop" disabled>停止</button>
+  <button id="btn_restart" disabled>重启</button>
+  <button id="btn_save" disabled>下载 State</button>
+  <input type="file" id="state_file" accept=".bin" style="display:none">
+  <button id="btn_load" disabled>加载 State</button>
+  <span id="status">就绪</span>
+</div>
+<div id="screen_wrap">
+  <div id="screen_container">
+    <div style="white-space:pre;font:14px monospace;line-height:14px"></div>
+    <canvas style="display:none"></canvas>
+  </div>
+</div>
+
+<script src="libv86.js"></script>
+<script>
+var emulator = null;
+var statusEl = document.getElementById("status");
+var screenContainer = document.getElementById("screen_container");
+var btnStart = document.getElementById("btn_start");
+var btnPause = document.getElementById("btn_pause");
+var btnStop = document.getElementById("btn_stop");
+var btnRestart = document.getElementById("btn_restart");
+var btnSave = document.getElementById("btn_save");
+var btnLoad = document.getElementById("btn_load");
+var hdaInput = document.getElementById("hda_file");
+var cdInput = document.getElementById("cd_file");
+var memInput = document.getElementById("mem_size");
+var stateInput = document.getElementById("state_file");
+
+function setStatus(s){ statusEl.textContent = s; console.log("[v86]", s); }
+function setButtons(enabled){
+  [btnStart,btnPause,btnStop,btnRestart,btnSave,btnLoad].forEach(function(b){ b.disabled = !enabled; });
+}
+function destroyEmulator(){
+  if(!emulator) return;
+  try{ emulator.stop(); }catch(e){}
+  emulator = null;
+}
+
+// ---- 内存持久化 ----
+function loadMemSetting(){
+  var v = localStorage.getItem("v86_mem");
+  if(v) memInput.value = v;
+}
+function saveMemSetting(){
+  localStorage.setItem("v86_mem", memInput.value);
+}
+memInput.addEventListener("change", saveMemSetting);
+loadMemSetting();
+
+// ---- 用户上传 HDA ----
+hdaInput.addEventListener("change", function(){
+  if(!hdaInput.files.length) return;
+  var file = hdaInput.files[0];
+  var mem = parseInt(memInput.value,10) || 128;
+  setStatus("已选 HDA: " + file.name + " (" + (file.size / 1024 / 1024).toFixed(1) + " MB)");
+  createWithBuffer(file, mem);
+});
+
+// ---- 创建模拟器：Buffer 模式（用户上传） ----
+function createWithBuffer(file, memMB){
+  destroyEmulator();
+  screenContainer.innerHTML = '<div style="white-space:pre;font:14px monospace;line-height:14px"></div><canvas style="display:none"></canvas>';
+  try{
+    emulator = new V86({
+      wasm_path: "v86.wasm",
+      memory_size: memMB * 1024 * 1024,
+      vga_memory_size: 8 * 1024 * 1024,
+      screen_container: screenContainer,
+      bios: { url: "seabios.bin" },
+      vga_bios: { url: "vgabios.bin" },
+      hda: { buffer: file },
+      autostart: false
+    });
+  }catch(e){ setStatus("创建失败: " + e.message); console.error(e); return; }
+  bindListeners();
+  setButtons(true);
+  setStatus("已创建，点启动");
+}
+
+function bindListeners(){
+  emulator.add_listener("emulator-ready", function(){ setStatus("就绪"); });
+  emulator.add_listener("emulator-started", function(){ setStatus("运行中"); });
+  emulator.add_listener("emulator-stopped", function(){ setStatus("已停止"); });
+}
+
+// ---- 控制按钮 ----
+btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("启动中..."); }catch(e){ setStatus("启动失败: "+e.message); } } };
+btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("已暂停"); }catch(e){} } };
+btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("已停止"); }catch(e){} } };
+btnRestart.onclick = function(){ if(emulator){ try{ emulator.restart(); setStatus("重启中..."); }catch(e){} } };
+
+// ---- State 下载 / 加载 ----
+btnSave.onclick = async function(){
+  if(!emulator) return;
+  try{
+    var state = await emulator.save_state();
+    var a = document.createElement("a");
+    a.download = "v86state.bin";
+    a.href = URL.createObjectURL(new Blob([state]));
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus("State 已下载 (" + state.byteLength + " bytes)");
+  }catch(e){ setStatus("保存失败: " + e.message); }
+};
+
+btnLoad.onclick = function(){ stateInput.click(); };
+stateInput.onchange = function(){
+  if(!stateInput.files.length || !emulator) return;
+  var fr = new FileReader();
+  fr.onload = async function(e){
+    try{
+      await emulator.restore_state(e.target.result);
+      setStatus("State 已恢复");
+    }catch(err){ setStatus("恢复失败: " + err.message); }
+  };
+  fr.readAsArrayBuffer(stateInput.files[0]);
+};
+
+// ---- CD 挂载（尝试性） ----
+cdInput.onchange = function(){
+  if(!cdInput.files.length) return;
+  if(!emulator){ setStatus("请先创建模拟器"); return; }
+  setStatus("CD 动态挂载在 v86 中支持不完整，建议重启后作为 cdrom 配置项传入");
+};
+
+setStatus("请选择镜像文件");
+</script>
+</body>
+</html>
   #status{color:#888;margin-left:auto}
   #screen_wrap{position:absolute;top:42px;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:#000}
   #screen_container{white-space:pre;font:14px monospace;line-height:14px}
