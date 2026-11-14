@@ -142,7 +142,12 @@ function buildEmulator(autoStart){
   bindListeners();
   setButtons(true);
   setStatus("已创建，点启动");
-  if(autoStart){ emulator.run(); setStatus("启动中..."); }
+  if(autoStart){
+    // 等 v86 初始化完成再启动，防止 undefined 报错
+    emulator.add_listener("emulator-ready", function(){
+      try{ emulator.run(); setStatus("启动中..."); }catch(e){ setStatus("启动失败: "+e.message); }
+    });
+  }
 }
 
 function bindListeners(){
