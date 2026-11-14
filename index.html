@@ -60,6 +60,7 @@
     <label>System:</label>
     <select id="os_preset">
       <option value="win95">Windows 95 / 98</option>
+      <option value="linux">Linux (CLI)</option>
       <option value="dos">DOS / KolibriOS</option>
     </select>
 
@@ -152,6 +153,7 @@ var currentCd1 = null;
 
 var PROFILES = {
   win95: { mem: 128, acpi: false },
+  linux: { mem: 256, acpi: true },
   dos:   { mem: 64,  acpi: false }
 };
 var currentProfile = PROFILES.win95;
