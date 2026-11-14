@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>获取 Windows 95 镜像</title>
+<style>
+  body{margin:0;padding:20px;background:#0a0a0a;color:#ddd;font-family:monospace;font-size:13px;line-height:1.7}
+  h1{font-size:16px;margin:0 0 12px;color:#eee}
+  a{color:#4a9eff;text-decoration:none}
+  a:hover{text-decoration:underline}
+  .box{background:#000;border:1px solid #333;padding:12px;margin:12px 0}
+  .hint{color:#888;font-size:12px}
+  code{background:#1a1a1a;padding:2px 6px;border-radius:3px}
+</style>
+</head>
+<body>
+<h1>获取 Windows 95 镜像</h1>
+
+<div class="box">
+  <p>请从 GitHub Release 页面下载镜像文件：</p>
+  <p><a href="https://github.com/Aiden12910/Windows-web-sim-file-support/releases/tag/v1" target="_blank" rel="noopener">打开 Release 下载页 →</a></p>
+  <p class="hint">文件名：<code>windows95.img</code>，大小约 1 GB。下载完成后回到本页面，在顶部“HDA (镜像)”处选择该文件。</p>
+</div>
+
+<div class="box">
+  <p>如果上面的链接打不开，可以直接下载附件：</p>
+  <p><a href="https://github.com/Aiden12910/Windows-web-sim-file-support/releases/download/v1/windows95.img" target="_blank" rel="noopener">直接下载 windows95.img →</a></p>
+</div>
+
+<p class="hint">
+  为什么不能在这里直接下载？<br>
+  GitHub Release 和 Hugging Face 的下载链接都不返回 CORS 头，浏览器里的 JavaScript 无法跨域读取。<br>
+  手动下载到本地后，通过 v86 页面的文件选择框加载，完全绕开跨域限制。
+</p>
+</body>
+</html>
