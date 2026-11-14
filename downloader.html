@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>Titan1um - 获取镜像与 ISO 转换</title>
+<title>Titan1um - 获取镜像与 ISO 转换 / Get Image & ISO Converter</title>
 <style>
   body{margin:0;padding:20px;background:#0a0a0a;color:#ddd;font-family:monospace;font-size:13px;line-height:1.7}
   h1{font-size:16px;margin:0 0 12px;color:#eee}
@@ -15,39 +15,41 @@
 </style>
 </head>
 <body>
-<h1>Titan1um - 获取 Windows 95 镜像</h1>
+<h1>Titan1um - 获取 Windows 95 镜像 / Get Windows 95 Image</h1>
 
 <div class="box">
-  <p>请从 GitHub Release 页面下载镜像文件：</p>
-  <p><a href="https://github.com/aiden12910-12910/Windows95/releases/tag/img" target="_blank" rel="noopener">打开 Release 下载页 →</a></p>
-  <p class="hint">文件名：<code>windows95.img</code>，大小约 1 GB。下载完成后回到本页面，在顶部“HDA (镜像)”处选择该文件。</p>
+  <p>请从 GitHub Release 页面下载镜像文件：<br>Please download the image file from the GitHub Release page:</p>
+  <p><a href="https://github.com/aiden12910-12910/Windows95/releases/tag/img" target="_blank" rel="noopener">打开 Release 下载页 / Open Release page →</a></p>
+  <p class="hint">文件名/Filename：<code>windows95.img</code>，大小约 1 GB / Size approx 1 GB. 下载完成后回到本页面，在顶部“HDA”处选择该文件。<br>After downloading, return to this page and select the file under "HDA".</p>
 </div>
 
 <div class="box">
-  <p>如果上面的链接打不开，可以直接下载附件：</p>
-  <p><a href="https://github.com/aiden12910-12910/Windows95/releases/download/img/windows95.img" target="_blank" rel="noopener">直接下载 windows95.img →</a></p>
+  <p>如果上面的链接打不开，可以直接下载附件：<br>If the link above doesn't work, download the attachment directly:</p>
+  <p><a href="https://github.com/aiden12910-12910/Windows95/releases/download/img/windows95.img" target="_blank" rel="noopener">直接下载 windows95.img / Direct download →</a></p>
 </div>
 
-<h2>文件夹转 ISO（支持子目录，在 Win95 里当 CD 用）</h2>
+<h2>文件夹转 ISO（支持子目录）/ Folder to ISO (Subdirectories supported)</h2>
 
 <div class="box">
-  <p>选择一个文件夹（会递归包含所有子目录和文件），生成一个 <code>.iso</code>，然后在 Titan1um 页面里把它选为 CD。</p>
+  <p>选择一个文件夹（会递归包含所有子目录和文件），生成一个 <code>.iso</code>，然后在 Titan1um 页面里把它选为 CD。<br>Select a folder (all subdirectories and files will be recursively included) to generate a <code>.iso</code>, then select it as a CD in the Titan1um page.</p>
   <p>
     <input type="file" id="iso_dir" webkitdirectory directory multiple style="color:#ddd">
-    <button id="btn_build_iso" type="button" style="padding:4px 12px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace">生成 ISO</button>
-    <button id="btn_save_iso" type="button" disabled style="padding:4px 12px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace">保存 ISO 到本地</button>
+    <button id="btn_build_iso" type="button" style="padding:4px 12px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace">生成 ISO / Build ISO</button>
+    <button id="btn_save_iso" type="button" disabled style="padding:4px 12px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace">保存 ISO / Save ISO</button>
   </p>
-  <div id="iso_log" class="hint">等待选择文件夹</div>
+  <div id="iso_log" class="hint">等待选择文件夹 / Waiting for folder selection</div>
 </div>
 
 <p class="hint">
   为什么不能在这里直接下载镜像？<br>
   GitHub Release 和 Hugging Face 的下载链接都不返回 CORS 头，浏览器里的 JavaScript 无法跨域读取。<br>
-  手动下载到本地后，通过 Titan1um 的界面加载，完全绕开跨域限制。
+  手动下载到本地后，通过 Titan1um 的界面加载，完全绕开跨域限制。<br><br>
+  Why can't I download the image directly here?<br>
+  GitHub Release and Hugging Face download links don't return CORS headers, so browser JavaScript cannot read them cross-origin.<br>
+  Manually download it locally, then load it via the Titan1um interface to completely bypass cross-origin restrictions.
 </p>
 
 <script>
-// (JavaScript 代码完全保持不变)
 var SECTOR = 2048;
 var isoBlob = null;
 var isoName = "data.iso";
@@ -238,19 +240,19 @@ async function buildIso(files){
 }
 
 btnBuildIso.onclick = async function(){
-  if(!isoDirInput.files.length){ isoLogSet("请先选择文件夹"); return; }
+  if(!isoDirInput.files.length){ isoLogSet("请先选择文件夹 / Please select a folder first"); return; }
   btnBuildIso.disabled = true;
   btnSaveIso.disabled = true;
-  isoLogSet("正在生成 ISO（含子目录）...");
+  isoLogSet("正在生成 ISO / Generating ISO...");
   try{
     var blob = await buildIso(Array.from(isoDirInput.files));
     isoBlob = blob;
     var base = isoDirInput.files[0].webkitRelativePath.split("/")[0] || "data";
     isoName = base + ".iso";
-    isoLogSet("生成完成：" + (blob.size / 1024 / 1024).toFixed(2) + " MB，点“保存 ISO 到本地”");
+    isoLogSet("生成完成/Generated：" + (blob.size / 1024 / 1024).toFixed(2) + " MB，点击保存 / Click save");
     btnSaveIso.disabled = false;
   }catch(e){
-    isoLogSet("生成失败: " + e.message);
+    isoLogSet("生成失败/Failed: " + e.message);
     console.error(e);
   }finally{
     btnBuildIso.disabled = false;
@@ -264,7 +266,7 @@ btnSaveIso.onclick = function(){
   a.download = isoName;
   a.click();
   URL.revokeObjectURL(a.href);
-  isoLogSet("已保存: " + isoName);
+  isoLogSet("已保存/Saved: " + isoName);
 };
 </script>
 </body>
