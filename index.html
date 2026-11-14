@@ -14,7 +14,6 @@
     display: flex; gap: 6px; align-items: center; padding: 6px 10px;
     background: #111; border-bottom: 1px solid #333;
     flex-wrap: wrap; font-size: 12px; flex-shrink: 0;
-    transition: transform 0.3s ease, opacity 0.3s ease;
   }
   #topbar button, #topbar select, #topbar input[type=number] {
     padding: 3px 8px; background: #222; color: #ddd;
@@ -94,9 +93,13 @@
     <button id="btn_pause" disabled>Pause</button>
     <button id="btn_stop" disabled>Stop</button>
     <button id="btn_restart" disabled>Restart</button>
+    
     <button id="btn_save" disabled>Save State</button>
     <input type="file" id="state_file" class="hidden-file" accept=".bin">
     <button id="btn_load" disabled>Load State</button>
+
+    <!-- 新增导出 HDA 按钮 -->
+    <button id="btn_export_hda" disabled style="color: #4ea8de; border-color: #4ea8de;">Export HDA</button>
     
     <button id="btn_fullscreen">Theater Mode</button>
     <button id="dl_toggle">Images & Games ▼</button>
@@ -127,6 +130,8 @@ var btnRestart = document.getElementById("btn_restart");
 var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
 var btnFullscreen = document.getElementById("btn_fullscreen");
+var btnExportHda = document.getElementById("btn_export_hda");
+
 var hdaInput = document.getElementById("hda_file");
 var hdaName = document.getElementById("hda_name");
 var memInput = document.getElementById("mem_size");
@@ -159,7 +164,7 @@ var currentProfile = PROFILES.win95;
 
 function setStatus(s){ statusEl.textContent = s; console.log("[Titan1um]", s); }
 function setButtons(enabled){
-  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad].forEach(function(b){ b.disabled = !enabled; });
+  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad, btnExportHda].forEach(function(b){ b.disabled = !enabled; });
 }
 function destroyEmulator(){
   if(!emulator) return;
@@ -355,6 +360,33 @@ stateInput.onchange = function(){
     }catch(err){ setStatus("Restore failed: " + err.message); }
   };
   fr.readAsArrayBuffer(stateInput.files[0]);
+};
+
+// ---- 扒下 HDA 镜像 ----
+btnExportHda.onclick = function(){
+  if(!emulator) return;
+  try {
+    // 尝试通过底层路径获取 IDE 主盘的 buffer
+    var ide = emulator.v86.cpu.devices.ide;
+    if (!ide || !ide.primary || !ide.primary.master) {
+      throw new Error("HDA device not found.");
+    }
+    var buffer = ide.primary.master.buffer;
+    if (!buffer || buffer.length === 0) {
+      throw new Error("HDA buffer is empty.");
+    }
+
+    // 下载 Blob
+    var a = document.createElement("a");
+    a.download = "exported_hda.img";
+    a.href = URL.createObjectURL(new Blob([buffer], { type: "application/octet-stream" }));
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus("HDA Exported successfully (" + (buffer.length / 1024 / 1024).toFixed(2) + " MB)");
+  } catch(e) {
+    setStatus("Export failed: " + e.message);
+    console.error(e);
+  }
 };
 
 updateCdUI();
