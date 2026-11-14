@@ -60,7 +60,6 @@
     <label>System:</label>
     <select id="os_preset">
       <option value="win95">Windows 95 / 98</option>
-      <option value="linux">Linux (CLI)</option>
       <option value="dos">DOS / KolibriOS</option>
     </select>
 
@@ -71,6 +70,15 @@
 
     <label>RAM:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
     
+    <!-- 新增软驱槽位 -->
+    <div class="cd-group">
+      <label>Floppy:</label>
+      <button id="btn_fda_inject" class="file-btn">Inject</button>
+      <button id="btn_fda_eject" disabled>Eject</button>
+      <input type="file" id="fda_file" class="hidden-file" accept=".img,.ima">
+      <span id="fda_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
+    </div>
+
     <!-- CD 1 槽位 -->
     <div class="cd-group">
       <label>CD 1:</label>
@@ -78,15 +86,6 @@
       <button id="btn_cd1_eject" disabled>Eject</button>
       <input type="file" id="cd1_file" class="hidden-file" accept=".iso">
       <span id="cd1_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
-    </div>
-
-    <!-- CD 2 槽位 -->
-    <div class="cd-group">
-      <label>CD 2:</label>
-      <button id="btn_cd2_inject" class="file-btn">Inject</button>
-      <button id="btn_cd2_eject" disabled>Eject</button>
-      <input type="file" id="cd2_file" class="hidden-file" accept=".iso">
-      <span id="cd2_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
     </div>
 
     <button id="btn_start" disabled>Start</button>
@@ -97,9 +96,6 @@
     <button id="btn_save" disabled>Save State</button>
     <input type="file" id="state_file" class="hidden-file" accept=".bin">
     <button id="btn_load" disabled>Load State</button>
-
-    <!-- 新增导出 HDA 按钮 -->
-    <button id="btn_export_hda" disabled style="color: #4ea8de; border-color: #4ea8de;">Export HDA</button>
     
     <button id="btn_fullscreen">Theater Mode</button>
     <button id="dl_toggle">Images & Games ▼</button>
@@ -130,8 +126,6 @@ var btnRestart = document.getElementById("btn_restart");
 var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
 var btnFullscreen = document.getElementById("btn_fullscreen");
-var btnExportHda = document.getElementById("btn_export_hda");
-
 var hdaInput = document.getElementById("hda_file");
 var hdaName = document.getElementById("hda_name");
 var memInput = document.getElementById("mem_size");
@@ -140,31 +134,31 @@ var presetSelect = document.getElementById("os_preset");
 var dlToggle = document.getElementById("dl_toggle");
 var dlPanel = document.getElementById("dl_panel");
 
+// Floppy 槽位元素
+var fdaInput = document.getElementById("fda_file");
+var fdaName = document.getElementById("fda_name");
+var btnFdaInject = document.getElementById("btn_fda_inject");
+var btnFdaEject = document.getElementById("btn_fda_eject");
+
 // CD 槽位元素
 var cd1Input = document.getElementById("cd1_file");
 var cd1Name = document.getElementById("cd1_name");
 var btnCd1Inject = document.getElementById("btn_cd1_inject");
 var btnCd1Eject = document.getElementById("btn_cd1_eject");
 
-var cd2Input = document.getElementById("cd2_file");
-var cd2Name = document.getElementById("cd2_name");
-var btnCd2Inject = document.getElementById("btn_cd2_inject");
-var btnCd2Eject = document.getElementById("btn_cd2_eject");
-
 var currentHda = null;
+var currentFda = null;
 var currentCd1 = null;
-var currentCd2 = null;
 
 var PROFILES = {
   win95: { mem: 128, acpi: false },
-  linux: { mem: 256, acpi: true },
   dos:   { mem: 64,  acpi: false }
 };
 var currentProfile = PROFILES.win95;
 
 function setStatus(s){ statusEl.textContent = s; console.log("[Titan1um]", s); }
 function setButtons(enabled){
-  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad, btnExportHda].forEach(function(b){ b.disabled = !enabled; });
+  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad].forEach(function(b){ b.disabled = !enabled; });
 }
 function destroyEmulator(){
   if(!emulator) return;
@@ -172,45 +166,46 @@ function destroyEmulator(){
   emulator = null;
 }
 
-// ---- CD 状态更新 ----
-function updateCdUI() {
+// ---- 槽位状态更新 ----
+function updateSlotsUI() {
+  fdaName.textContent = currentFda ? currentFda.name : "(empty)";
+  btnFdaEject.disabled = !currentFda;
+  
   cd1Name.textContent = currentCd1 ? currentCd1.name : "(empty)";
   btnCd1Eject.disabled = !currentCd1;
-  cd2Name.textContent = currentCd2 ? currentCd2.name : "(empty)";
-  btnCd2Eject.disabled = !currentCd2;
 }
+
+// ---- Floppy 操作 ----
+btnFdaInject.onclick = function() { fdaInput.click(); };
+fdaInput.onchange = function() {
+  if(!fdaInput.files.length) return;
+  currentFda = fdaInput.files[0];
+  updateSlotsUI();
+  setStatus("Floppy Injected: " + currentFda.name);
+  if(currentHda) buildEmulator(true);
+};
+btnFdaEject.onclick = function() {
+  currentFda = null;
+  fdaInput.value = "";
+  updateSlotsUI();
+  setStatus("Floppy Ejected");
+  if(currentHda) buildEmulator(true);
+};
 
 // ---- CD 1 操作 ----
 btnCd1Inject.onclick = function() { cd1Input.click(); };
 cd1Input.onchange = function() {
   if(!cd1Input.files.length) return;
   currentCd1 = cd1Input.files[0];
-  updateCdUI();
-  setStatus("CD 1 Injected: " + currentCd1.name);
+  updateSlotsUI();
+  setStatus("CD Injected: " + currentCd1.name);
   if(currentHda) buildEmulator(true);
 };
 btnCd1Eject.onclick = function() {
   currentCd1 = null;
   cd1Input.value = "";
-  updateCdUI();
-  setStatus("CD 1 Ejected");
-  if(currentHda) buildEmulator(true);
-};
-
-// ---- CD 2 操作 ----
-btnCd2Inject.onclick = function() { cd2Input.click(); };
-cd2Input.onchange = function() {
-  if(!cd2Input.files.length) return;
-  currentCd2 = cd2Input.files[0];
-  updateCdUI();
-  setStatus("CD 2 Injected: " + currentCd2.name);
-  if(currentHda) buildEmulator(true);
-};
-btnCd2Eject.onclick = function() {
-  currentCd2 = null;
-  cd2Input.value = "";
-  updateCdUI();
-  setStatus("CD 2 Ejected");
+  updateSlotsUI();
+  setStatus("CD Ejected");
   if(currentHda) buildEmulator(true);
 };
 
@@ -287,16 +282,14 @@ function buildEmulator(autoStart){
     autostart: false
   };
 
-  // 构建 CD 阵列
-  var cds = [];
-  if (currentCd1) cds.push({ buffer: currentCd1 });
-  if (currentCd2) cds.push({ buffer: currentCd2 });
-  
-  if (cds.length > 0) {
-    opts.cdrom = cds[0];
-    if (cds.length > 1) {
-      opts.cdroms = cds;
-    }
+  // 挂载软盘
+  if (currentFda) {
+    opts.fda = { buffer: currentFda };
+  }
+
+  // 挂载 CD
+  if (currentCd1) {
+    opts.cdrom = { buffer: currentCd1 };
   }
 
   try{
@@ -362,34 +355,7 @@ stateInput.onchange = function(){
   fr.readAsArrayBuffer(stateInput.files[0]);
 };
 
-// ---- 扒下 HDA 镜像 ----
-btnExportHda.onclick = function(){
-  if(!emulator) return;
-  try {
-    // 尝试通过底层路径获取 IDE 主盘的 buffer
-    var ide = emulator.v86.cpu.devices.ide;
-    if (!ide || !ide.primary || !ide.primary.master) {
-      throw new Error("HDA device not found.");
-    }
-    var buffer = ide.primary.master.buffer;
-    if (!buffer || buffer.length === 0) {
-      throw new Error("HDA buffer is empty.");
-    }
-
-    // 下载 Blob
-    var a = document.createElement("a");
-    a.download = "exported_hda.img";
-    a.href = URL.createObjectURL(new Blob([buffer], { type: "application/octet-stream" }));
-    a.click();
-    URL.revokeObjectURL(a.href);
-    setStatus("HDA Exported successfully (" + (buffer.length / 1024 / 1024).toFixed(2) + " MB)");
-  } catch(e) {
-    setStatus("Export failed: " + e.message);
-    console.error(e);
-  }
-};
-
-updateCdUI();
+updateSlotsUI();
 setStatus("Please select an HDA image");
 </script>
 </body>
