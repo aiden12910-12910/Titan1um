@@ -2,49 +2,151 @@
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
-<title>Titan1um - Windows 95 模拟器 / Emulator</title>
+<title>Titan1um - Windows 95 Emulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  html,body{margin:0;padding:0;background:#000;color:#ccc;font-family:monospace;height:100%;overflow:hidden}
-  #topbar{display:flex;gap:6px;align-items:center;padding:6px 10px;background:#111;border-bottom:1px solid #333;flex-wrap:wrap;font-size:12px}
-  #topbar button,#topbar select,#topbar input[type=number]{padding:3px 8px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-size:12px}
-  #topbar button:disabled{opacity:.4;cursor:not-allowed}
-  #topbar label{color:#888}
-  #status{color:#888;margin-left:auto}
-  #dl_toggle{padding:3px 10px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-size:12px}
-  #dl_panel{display:none;background:#0a0a0a;border-bottom:1px solid #333}
-  #dl_panel iframe{width:100%;height:340px;border:0;display:block}
-  #screen_wrap{position:absolute;top:42px;left:0;right:0;bottom:0;display:flex;align-items:center;justify-content:center;background:#000}
-  #screen_container{white-space:pre;font:14px monospace;line-height:14px}
-  #screen_container>div{white-space:pre;font:14px monospace;line-height:14px}
-  #screen_container>canvas{display:block;background:#000}
+  /* ---- 全局及布局修复 ---- */
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #000;
+    color: #ccc;
+    font-family: monospace;
+    height: 100%;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column; /* 让顶栏和屏幕区域上下排列 */
+  }
+  
+  /* ---- 顶栏 ---- */
+  #topbar {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    padding: 6px 10px;
+    background: #111;
+    border-bottom: 1px solid #333;
+    flex-wrap: wrap; /* 允许缩放时按钮换行 */
+    font-size: 12px;
+    flex-shrink: 0; /* 保证顶栏不被压缩 */
+  }
+  #topbar button, #topbar select, #topbar input[type=number] {
+    padding: 3px 8px;
+    background: #222;
+    color: #ddd;
+    border: 1px solid #444;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  #topbar button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+  #topbar label { color: #888; }
+  
+  /* 品牌 Logo 标识 */
+  #brand {
+    font-weight: bold;
+    color: #4ea8de;
+    letter-spacing: 1px;
+    margin-right: 10px;
+    font-size: 14px;
+  }
+
+  #status {
+    color: #888;
+    margin-left: auto; /* 把状态推到最右边 */
+  }
+
+  /* ---- 下载器面板 ---- */
+  #dl_toggle {
+    padding: 3px 10px;
+    background: #222;
+    color: #ddd;
+    border: 1px solid #444;
+    cursor: pointer;
+    font-size: 12px;
+  }
+  #dl_panel {
+    display: none;
+    background: #0a0a0a;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+    /* 用 flex-basis 设置固定高度，防止撑满屏幕 */
+    height: 340px; 
+  }
+  #dl_panel iframe {
+    width: 100%;
+    height: 100%;
+    border: 0;
+    display: block;
+  }
+
+  /* ---- 模拟器屏幕区域 ---- */
+  #screen_wrap {
+    flex: 1; /* 占据剩余的所有高度 */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #000;
+    overflow: hidden;
+    position: relative;
+  }
+
+  #screen_container {
+    white-space: pre;
+    font: 14px monospace;
+    line-height: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+  }
+  
+  /* 修复比例问题的核心：让 canvas 保持比例并居中 */
+  #screen_container > div {
+    display: none; /* v86 的文本后备层，通常隐藏 */
+  }
+  #screen_container > canvas {
+    display: block;
+    background: #000;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain; /* 关键：保持比例，留黑边不拉伸 */
+  }
 </style>
 </head>
 <body>
-<div id="topbar">
-  <label>HDA (镜像/Image):</label><input type="file" id="hda_file" accept=".img,.iso,.bin">
-  <label>CD (可选/Opt):</label><input type="file" id="cd_file" accept=".iso">
-  <label>内存/Mem:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
-  <button id="btn_start" disabled>启动/Start</button>
-  <button id="btn_pause" disabled>暂停/Pause</button>
-  <button id="btn_stop" disabled>停止/Stop</button>
-  <button id="btn_restart" disabled>重启/Restart</button>
-  <button id="btn_save" disabled>下载 State/Save State</button>
-  <input type="file" id="state_file" accept=".bin" style="display:none">
-  <button id="btn_load" disabled>加载 State/Load State</button>
-  <button id="dl_toggle">获取镜像/Get Image ▼</button>
-  <span id="status">就绪/Ready</span>
-</div>
-
-<div id="dl_panel">
-  <iframe id="dl_frame" src="downloader.html"></iframe>
-</div>
-
-<div id="screen_wrap">
-  <div id="screen_container">
-    <div style="white-space:pre;font:14px monospace;line-height:14px"></div>
-    <canvas style="display:none"></canvas>
+  
+  <div id="topbar">
+    <div id="brand">Titan1um</div>
+    
+    <label>HDA:</label><input type="file" id="hda_file" accept=".img,.iso,.bin">
+    <label>CD:</label><input type="file" id="cd_file" accept=".iso">
+    <label>内存:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
+    <button id="btn_start" disabled>启动</button>
+    <button id="btn_pause" disabled>暂停</button>
+    <button id="btn_stop" disabled>停止</button>
+    <button id="btn_restart" disabled>重启</button>
+    <button id="btn_save" disabled>下载 State</button>
+    <input type="file" id="state_file" accept=".bin" style="display:none">
+    <button id="btn_load" disabled>加载 State</button>
+    
+    <button id="dl_toggle">获取镜像 ▼</button>
+    <span id="status">就绪</span>
   </div>
-</div>
+
+  <div id="dl_panel">
+    <iframe id="dl_frame" src="downloader.html"></iframe>
+  </div>
+
+  <div id="screen_wrap">
+    <div id="screen_container">
+      <div style="white-space:pre;font:14px monospace;line-height:14px"></div>
+      <canvas style="display:none"></canvas>
+    </div>
+  </div>
 
 <script src="libv86.js"></script>
 <script>
@@ -68,9 +170,9 @@ var dlPanel = document.getElementById("dl_panel");
 var currentHda = null;
 var currentCd = null;
 
-function setStatus(s){ statusEl.textContent = s; console.log("[v86]", s); }
+function setStatus(s){ statusEl.textContent = s; console.log("[Titan1um]", s); }
 function setButtons(enabled){
-  [btnStart,btnPause,btnStop,btnRestart,btnSave,btnLoad].forEach(function(b){ b.disabled = !enabled; });
+  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad].forEach(function(b){ b.disabled = !enabled; });
 }
 function destroyEmulator(){
   if(!emulator) return;
@@ -78,47 +180,49 @@ function destroyEmulator(){
   emulator = null;
 }
 
-// ---- 下载器面板折叠 / Toggle downloader panel ----
+// ---- 下载器面板折叠 (配合 CSS Flexbox 布局) ----
 dlToggle.onclick = function(){
-  var open = dlPanel.style.display === "block";
-  dlPanel.style.display = open ? "none" : "block";
-  dlToggle.textContent = open ? "获取镜像/Get Image ▼" : "获取镜像/Get Image ▲";
-  document.getElementById("screen_wrap").style.top = open ? "42px" : "382px";
+  var isOpen = dlPanel.style.display === "block";
+  dlPanel.style.display = isOpen ? "none" : "block";
+  dlToggle.textContent = isOpen ? "获取镜像 ▼" : "获取镜像 ▲";
 };
 
-// ---- 内存持久化 / Memory persistence ----
+// ---- 内存持久化 ----
 function loadMemSetting(){
-  var v = localStorage.getItem("v86_mem");
+  var v = localStorage.getItem("titan1um_mem");
   if(v) memInput.value = v;
 }
 function saveMemSetting(){
-  localStorage.setItem("v86_mem", memInput.value);
+  localStorage.setItem("titan1um_mem", memInput.value);
 }
 memInput.addEventListener("change", saveMemSetting);
 loadMemSetting();
 
-// ---- 选 HDA / Select HDA ----
+// ---- 选 HDA ----
 hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
-  setStatus("已选 HDA/Selected HDA: " + currentHda.name);
+  setStatus("已选 HDA: " + currentHda.name);
   buildEmulator(false);
 });
 
-// ---- 选 CD / Select CD ----
+// ---- 选 CD ----
 cdInput.addEventListener("change", function(){
   if(!cdInput.files.length) return;
   currentCd = cdInput.files[0];
-  setStatus("已选 CD/Selected CD: " + currentCd.name + "，重建模拟器/Rebuilding emulator");
+  setStatus("已选 CD: " + currentCd.name + "，重建模拟器");
   if(currentHda) buildEmulator(true);
 });
 
-// ---- 构建模拟器 / Build emulator ----
+// ---- 构建模拟器 ----
 function buildEmulator(autoStart){
-  if(!currentHda){ setStatus("请先选择 HDA 镜像 / Please select HDA image"); return; }
+  if(!currentHda){ setStatus("请先选择 HDA 镜像"); return; }
   destroyEmulator();
+  
+  // 重置 canvas 容器
   screenContainer.innerHTML = '<div style="white-space:pre;font:14px monospace;line-height:14px"></div><canvas style="display:none"></canvas>';
-  var memMB = parseInt(memInput.value,10) || 128;
+  
+  var memMB = parseInt(memInput.value, 10) || 128;
 
   var opts = {
     wasm_path: "v86.wasm",
@@ -137,41 +241,62 @@ function buildEmulator(autoStart){
 
   try{
     emulator = new V86(opts);
-  }catch(e){ setStatus("创建失败/Create failed: " + e.message); console.error(e); return; }
+  }catch(e){ 
+    setStatus("创建失败: " + e.message); 
+    console.error(e); 
+    return; 
+  }
+  
   bindListeners();
   setButtons(true);
-  setStatus("已创建，点启动/Created, click Start");
+  setStatus("已创建，点启动");
+  
   if(autoStart){
     emulator.add_listener("emulator-ready", function(){
-      try{ emulator.run(); setStatus("启动中/Starting..."); }catch(e){ setStatus("启动失败/Start failed: "+e.message); }
+      try{ 
+        emulator.run(); 
+        setStatus("启动中..."); 
+      }catch(e){ 
+        setStatus("启动失败: " + e.message); 
+      }
     });
   }
 }
 
 function bindListeners(){
-  emulator.add_listener("emulator-ready", function(){ setStatus("就绪/Ready"); });
-  emulator.add_listener("emulator-started", function(){ setStatus("运行中/Running"); });
-  emulator.add_listener("emulator-stopped", function(){ setStatus("已停止/Stopped"); });
+  emulator.add_listener("emulator-ready", function(){ setStatus("就绪"); });
+  emulator.add_listener("emulator-started", function(){ setStatus("运行中"); });
+  emulator.add_listener("emulator-stopped", function(){ setStatus("已停止"); });
 }
 
-// ---- 控制按钮 / Control buttons ----
-btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("启动中/Starting..."); }catch(e){ setStatus("启动失败/Start failed: "+e.message); } } };
-btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("已暂停/Paused"); }catch(e){} } };
-btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("已停止/Stopped"); }catch(e){} } };
-btnRestart.onclick = function(){ if(emulator){ try{ emulator.restart(); setStatus("重启中/Restarting..."); }catch(e){} } };
+// ---- 控制按钮 ----
+btnStart.onclick = function(){ 
+  if(emulator){ 
+    try{ emulator.run(); setStatus("启动中..."); }catch(e){ setStatus("启动失败: "+e.message); } 
+  } 
+};
+btnPause.onclick = function(){ 
+  if(emulator){ try{ emulator.stop(); setStatus("已暂停"); }catch(e){} } 
+};
+btnStop.onclick = function(){ 
+  if(emulator){ try{ emulator.stop(); setStatus("已停止"); }catch(e){} } 
+};
+btnRestart.onclick = function(){ 
+  if(emulator){ try{ emulator.restart(); setStatus("重启中..."); }catch(e){} } 
+};
 
-// ---- State 下载 / 加载 / State Save & Load ----
+// ---- State 下载 / 加载 ----
 btnSave.onclick = async function(){
   if(!emulator) return;
   try{
     var state = await emulator.save_state();
     var a = document.createElement("a");
-    a.download = "v86state.bin";
+    a.download = "titan1um_state.bin";
     a.href = URL.createObjectURL(new Blob([state]));
     a.click();
     URL.revokeObjectURL(a.href);
-    setStatus("State 已下载/State saved (" + state.byteLength + " bytes)");
-  }catch(e){ setStatus("保存失败/Save failed: " + e.message); }
+    setStatus("State 已下载 (" + state.byteLength + " bytes)");
+  }catch(e){ setStatus("保存失败: " + e.message); }
 };
 
 btnLoad.onclick = function(){ stateInput.click(); };
@@ -181,13 +306,13 @@ stateInput.onchange = function(){
   fr.onload = async function(e){
     try{
       await emulator.restore_state(e.target.result);
-      setStatus("State 已恢复/State restored");
-    }catch(err){ setStatus("恢复失败/Restore failed: " + err.message); }
+      setStatus("State 已恢复");
+    }catch(err){ setStatus("恢复失败: " + err.message); }
   };
   fr.readAsArrayBuffer(stateInput.files[0]);
 };
 
-setStatus("请选择 HDA 镜像 / Please select HDA image");
+setStatus("请选择 HDA 镜像");
 </script>
 </body>
 </html>
