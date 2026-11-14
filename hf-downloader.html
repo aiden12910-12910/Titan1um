@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>HF 镜像下载器</title>
+<style>
+  body{margin:0;padding:20px;background:#111;color:#ddd;font-family:monospace}
+  h1{font-size:18px;margin:0 0 16px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  input[type=text],input[type=number]{padding:6px 8px;background:#222;color:#ddd;border:1px solid #444;font-family:monospace}
+  button{padding:6px 14px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  #log{background:#000;border:1px solid #333;padding:10px;height:200px;overflow:auto;white-space:pre-wrap;font-size:12px;line-height:1.5}
+  #bar{height:10px;background:#333;border-radius:5px;overflow:hidden;margin:10px 0}
+  #bar-fill{height:100%;width:0;background:#4a9eff;transition:width .2s}
+  .hint{color:#888;font-size:12px;margin-top:8px}
+</style>
+</head>
+<body>
+<h1>HF 镜像下载器</h1>
+
+<div class="row">
+  <label>HF 仓库:</label>
+  <input type="text" id="repo" placeholder="用户名/仓库名" value="aiden12910/Windows-web-sim-file-support" style="width:360px">
+</div>
+<div class="row">
+  <label>分支:</label>
+  <input type="text" id="branch" value="main" style="width:100px">
+  <label>文件名:</label>
+  <input type="text" id="filename" placeholder="windows95.img" value="windows95.img" style="width:240px">
+</div>
+<div class="row">
+  <button id="btn_list" type="button">列出仓库文件</button>
+  <button id="btn_download" type="button">下载镜像</button>
+  <button id="btn_save" type="button" disabled>保存到本地</button>
+</div>
+
+<div id="bar"><div id="bar-fill"></div></div>
+<div id="log"></div>
+
+<p class="hint">
+  下载走 HF 的 resolve 直链：<code>https://huggingface.co/{repo}/resolve/{branch}/{filename}</code><br>
+  如果浏览器报 CORS 错误，说明 HF 的 CDN 不允许跨域读取，这个页面需要部署在同一域名下，或者改用 Worker 代理。
+</p>
+
+<script>
+var repoInput = document.getElementById("repo");
+var branchInput = document.getElementById("branch");
+var filenameInput = document.getElementById("filename");
+var btnList = document.getElementById("btn_list");
+var btnDownload = document.getElementById("btn_download");
+var btnSave = document.getElementById("btn_save");
+var barFill = document.getElementById("bar-fill");
+var logEl = document.getElementById("log");
+
+var downloadedBlob = null;
+var downloadedName = "";
+
+function log(s){
+  logEl.textContent += s + "\n";
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setProgress(pct){
+  barFill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+}
+
+function buildResolveUrl(){
+  var repo = repoInput.value.trim();
+  var branch = branchInput.value.trim() || "main";
+  var name = filenameInput.value.trim();
+  return "https://huggingface.co/" + repo + "/resolve/" + branch + "/" + encodeURIComponent(name);
+}
+
+// ---- 列出仓库文件 ----
+btnList.onclick = async function(){
+  var repo = repoInput.value.trim();
+  if(!repo){ log("请填写 HF 仓库"); return; }
+  btnList.disabled = true;
+  log("拉取仓库文件列表: " + repo);
+  try{
+    var r = await fetch("https://huggingface.co/api/models/" + repo);
+    if(!r.ok){ throw new Error("HTTP " + r.status); }
+    var data = await r.json();
+    var files = (data.siblings || []).map(function(s){ return s.rfilename; });
+    log("共 " + files.length + " 个文件:");
+    files.forEach(function(f){ log("  " + f); });
+  }catch(e){
+    log("失败: " + e.message);
+    log("如果提示 CORS，说明 HF API 不允许浏览器直接访问，需要 Worker 代理。");
+  }finally{
+    btnList.disabled = false;
+  }
+};
+
+// ---- 下载镜像 ----
+btnDownload.onclick = async function(){
+  var url = buildResolveUrl();
+  log("开始下载: " + url);
+  btnDownload.disabled = true;
+  btnSave.disabled = true;
+  downloadedBlob = null;
+  setProgress(0);
+
+  try{
+    var resp = await fetch(url);
+    if(!resp.ok){
+      throw new Error("HTTP " + resp.status + " " + resp.statusText);
+    }
+    var total = parseInt(resp.headers.get("Content-Length") || "0", 10);
+    var reader = resp.body.getReader();
+    var chunks = [];
+    var received = 0;
+
+    while(true){
+      var {done, value} = await reader.read();
+      if(done) break;
+      chunks.push(value);
+      received += value.length;
+      if(total > 0){
+        setProgress(received / total * 100);
+        log("已下载 " + (received/1024/1024).toFixed(1) + " / " + (total/1024/1024).toFixed(1) + " MB");
+      }else{
+        setProgress(0);
+        log("已下载 " + (received/1024/1024).toFixed(1) + " MB（总大小未知）");
+      }
+    }
+
+    downloadedBlob = new Blob(chunks);
+    downloadedName = filenameInput.value.trim() || "image.img";
+    log("下载完成: " + downloadedBlob.size + " bytes");
+    btnSave.disabled = false;
+  }catch(e){
+    log("下载失败: " + e.message);
+    log("常见原因：HF CDN 跨域限制、文件名/仓库/分支写错、网络中断。");
+  }finally{
+    btnDownload.disabled = false;
+  }
+};
+
+// ---- 保存到本地 ----
+btnSave.onclick = function(){
+  if(!downloadedBlob) return;
+  var a = document.createElement("a");
+  a.href = URL.createObjectURL(downloadedBlob);
+  a.download = downloadedName;
+  a.click();
+  URL.revokeObjectURL(a.href);
+  log("已保存到本地: " + downloadedName);
+};
+</script>
+</body>
+</html>
