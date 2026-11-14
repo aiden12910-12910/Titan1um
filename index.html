@@ -43,16 +43,10 @@
     display: block; background: #000;
     max-width: 100%; max-height: 100%; object-fit: contain;
   }
-
-  /* 全屏模式下的特殊样式 */
-  body.is-fullscreen #topbar {
-    display: none; /* 隐藏顶栏 */
-  }
-  body.is-fullscreen #screen_wrap {
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    z-index: 9999;
-  }
+  body.is-fullscreen #topbar { display: none; }
+  body.is-fullscreen #screen_wrap { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; }
+  
+  .cd-group { display: flex; align-items: center; gap: 4px; border-left: 1px solid #333; padding-left: 8px; margin-left: 4px; }
 </style>
 </head>
 <body>
@@ -63,16 +57,31 @@
     <label>System:</label>
     <select id="os_preset">
       <option value="win95">Windows 95 / 98</option>
-      <option value="win2k" disabled>Windows 2000 (N/A)</option>
-      <option value="winxp" disabled>Windows XP (N/A)</option>
       <option value="linux">Linux (CLI / Light)</option>
       <option value="dos">DOS / KolibriOS</option>
     </select>
 
     <label>HDA:</label><input type="file" id="hda_file" accept=".img,.iso,.bin">
-    <label>CD:</label><input type="file" id="cd_file" accept=".iso">
     <label>RAM:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
     
+    <!-- CD 1 槽位 -->
+    <div class="cd-group">
+      <label>CD 1:</label>
+      <input type="file" id="cd1_file" accept=".iso" style="display:none">
+      <button id="btn_cd1_inject">Inject</button>
+      <button id="btn_cd1_eject" disabled>Eject</button>
+      <span id="cd1_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
+    </div>
+
+    <!-- CD 2 槽位 -->
+    <div class="cd-group">
+      <label>CD 2:</label>
+      <input type="file" id="cd2_file" accept=".iso" style="display:none">
+      <button id="btn_cd2_inject">Inject</button>
+      <button id="btn_cd2_eject" disabled>Eject</button>
+      <span id="cd2_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
+    </div>
+
     <button id="btn_start" disabled>Start</button>
     <button id="btn_pause" disabled>Pause</button>
     <button id="btn_stop" disabled>Stop</button>
@@ -82,7 +91,6 @@
     <button id="btn_load" disabled>Load State</button>
     
     <button id="btn_fullscreen">Theater Mode</button>
-
     <button id="dl_toggle">Images & ISOs ▼</button>
     <span id="status">Ready</span>
   </div>
@@ -112,16 +120,26 @@ var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
 var btnFullscreen = document.getElementById("btn_fullscreen");
 var hdaInput = document.getElementById("hda_file");
-var cdInput = document.getElementById("cd_file");
 var memInput = document.getElementById("mem_size");
 var stateInput = document.getElementById("state_file");
 var presetSelect = document.getElementById("os_preset");
-
 var dlToggle = document.getElementById("dl_toggle");
 var dlPanel = document.getElementById("dl_panel");
 
+// CD 槽位元素
+var cd1Input = document.getElementById("cd1_file");
+var cd1Name = document.getElementById("cd1_name");
+var btnCd1Inject = document.getElementById("btn_cd1_inject");
+var btnCd1Eject = document.getElementById("btn_cd1_eject");
+
+var cd2Input = document.getElementById("cd2_file");
+var cd2Name = document.getElementById("cd2_name");
+var btnCd2Inject = document.getElementById("btn_cd2_inject");
+var btnCd2Eject = document.getElementById("btn_cd2_eject");
+
 var currentHda = null;
-var currentCd = null;
+var currentCd1 = null;
+var currentCd2 = null;
 
 var PROFILES = {
   win95: { mem: 128, acpi: false },
@@ -140,33 +158,61 @@ function destroyEmulator(){
   emulator = null;
 }
 
+// ---- CD 状态更新 ----
+function updateCdUI() {
+  cd1Name.textContent = currentCd1 ? currentCd1.name : "(empty)";
+  btnCd1Eject.disabled = !currentCd1;
+  cd2Name.textContent = currentCd2 ? currentCd2.name : "(empty)";
+  btnCd2Eject.disabled = !currentCd2;
+}
+
+// ---- CD 1 操作 ----
+btnCd1Inject.onclick = function() { cd1Input.click(); };
+cd1Input.onchange = function() {
+  if(!cd1Input.files.length) return;
+  currentCd1 = cd1Input.files[0];
+  updateCdUI();
+  setStatus("CD 1 Injected: " + currentCd1.name);
+  if(currentHda) buildEmulator(true); // 重建并自动启动
+};
+btnCd1Eject.onclick = function() {
+  currentCd1 = null;
+  cd1Input.value = "";
+  updateCdUI();
+  setStatus("CD 1 Ejected");
+  if(currentHda) buildEmulator(true);
+};
+
+// ---- CD 2 操作 ----
+btnCd2Inject.onclick = function() { cd2Input.click(); };
+cd2Input.onchange = function() {
+  if(!cd2Input.files.length) return;
+  currentCd2 = cd2Input.files[0];
+  updateCdUI();
+  setStatus("CD 2 Injected: " + currentCd2.name);
+  if(currentHda) buildEmulator(true);
+};
+btnCd2Eject.onclick = function() {
+  currentCd2 = null;
+  cd2Input.value = "";
+  updateCdUI();
+  setStatus("CD 2 Ejected");
+  if(currentHda) buildEmulator(true);
+};
+
 // ---- 全屏 / Theater Mode ----
 btnFullscreen.onclick = function() {
   if (!document.fullscreenElement) {
-    // 进入全屏
-    if (screenWrap.requestFullscreen) {
-      screenWrap.requestFullscreen();
-    } else if (screenWrap.webkitRequestFullscreen) { /* Safari */
-      screenWrap.webkitRequestFullscreen();
-    } else if (screenWrap.msRequestFullscreen) { /* IE11 */
-      screenWrap.msRequestFullscreen();
-    }
+    if (screenWrap.requestFullscreen) screenWrap.requestFullscreen();
   } else {
-    // 退出全屏
-    if (document.exitFullscreen) {
-      document.exitFullscreen();
-    }
+    if (document.exitFullscreen) document.exitFullscreen();
   }
 };
-
-// 监听全屏状态变化，自动切换 CSS 类
 document.addEventListener("fullscreenchange", function() {
   if (document.fullscreenElement) {
     document.body.classList.add("is-fullscreen");
-    setStatus("Theater Mode: ON (Press Esc to exit)");
   } else {
     document.body.classList.remove("is-fullscreen");
-    setStatus("Theater Mode: OFF");
   }
 });
 
@@ -175,11 +221,11 @@ presetSelect.addEventListener("change", function(e){
   var key = e.target.value;
   currentProfile = PROFILES[key] || PROFILES.win95;
   memInput.value = currentProfile.mem;
-  setStatus("Profile: " + key + " (RAM: " + currentProfile.mem + "MB)");
+  setStatus("Profile: " + key);
   if(currentHda) buildEmulator(false);
 });
 
-// ---- 下载器面板折叠 ----
+// ---- 下载器面板 ----
 dlToggle.onclick = function(){
   var isOpen = dlPanel.style.display === "block";
   dlPanel.style.display = isOpen ? "none" : "block";
@@ -205,14 +251,6 @@ hdaInput.addEventListener("change", function(){
   buildEmulator(false);
 });
 
-// ---- 选 CD ----
-cdInput.addEventListener("change", function(){
-  if(!cdInput.files.length) return;
-  currentCd = cdInput.files[0];
-  setStatus("Selected CD: " + currentCd.name + ". Rebuilding...");
-  if(currentHda) buildEmulator(true);
-});
-
 // ---- 构建模拟器 ----
 function buildEmulator(autoStart){
   if(!currentHda){ setStatus("Please select an HDA image first."); return; }
@@ -234,8 +272,17 @@ function buildEmulator(autoStart){
     autostart: false
   };
 
-  if(currentCd){
-    opts.cdrom = { buffer: currentCd };
+  // 构建 CD 阵列
+  var cds = [];
+  if (currentCd1) cds.push({ buffer: currentCd1 });
+  if (currentCd2) cds.push({ buffer: currentCd2 });
+  
+  if (cds.length > 0) {
+    // v86 支持 cdrom 或 cdroms 数组
+    opts.cdrom = cds[0];
+    if (cds.length > 1) {
+      opts.cdroms = cds; // 某些版本的 v86 支持多 CD
+    }
   }
 
   try{
@@ -301,6 +348,7 @@ stateInput.onchange = function(){
   fr.readAsArrayBuffer(stateInput.files[0]);
 };
 
+updateCdUI();
 setStatus("Please select an HDA image");
 </script>
 </body>
