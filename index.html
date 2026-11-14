@@ -71,7 +71,7 @@
 
     <label>RAM:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
     
-    <!-- 新增软驱槽位 -->
+    <!-- Floppy 槽位 -->
     <div class="cd-group">
       <label>Floppy:</label>
       <button id="btn_fda_inject" class="file-btn">Inject</button>
@@ -87,6 +87,15 @@
       <button id="btn_cd1_eject" disabled>Eject</button>
       <input type="file" id="cd1_file" class="hidden-file" accept=".iso">
       <span id="cd1_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
+    </div>
+
+    <!-- CD 2 槽位 (加回来了) -->
+    <div class="cd-group">
+      <label>CD 2:</label>
+      <button id="btn_cd2_inject" class="file-btn">Inject</button>
+      <button id="btn_cd2_eject" disabled>Eject</button>
+      <input type="file" id="cd2_file" class="hidden-file" accept=".iso">
+      <span id="cd2_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
     </div>
 
     <button id="btn_start" disabled>Start</button>
@@ -141,15 +150,22 @@ var fdaName = document.getElementById("fda_name");
 var btnFdaInject = document.getElementById("btn_fda_inject");
 var btnFdaEject = document.getElementById("btn_fda_eject");
 
-// CD 槽位元素
+// CD 1 槽位元素
 var cd1Input = document.getElementById("cd1_file");
 var cd1Name = document.getElementById("cd1_name");
 var btnCd1Inject = document.getElementById("btn_cd1_inject");
 var btnCd1Eject = document.getElementById("btn_cd1_eject");
 
+// CD 2 槽位元素
+var cd2Input = document.getElementById("cd2_file");
+var cd2Name = document.getElementById("cd2_name");
+var btnCd2Inject = document.getElementById("btn_cd2_inject");
+var btnCd2Eject = document.getElementById("btn_cd2_eject");
+
 var currentHda = null;
 var currentFda = null;
 var currentCd1 = null;
+var currentCd2 = null;
 
 var PROFILES = {
   win95: { mem: 128, acpi: false },
@@ -175,6 +191,9 @@ function updateSlotsUI() {
   
   cd1Name.textContent = currentCd1 ? currentCd1.name : "(empty)";
   btnCd1Eject.disabled = !currentCd1;
+
+  cd2Name.textContent = currentCd2 ? currentCd2.name : "(empty)";
+  btnCd2Eject.disabled = !currentCd2;
 }
 
 // ---- Floppy 操作 ----
@@ -200,14 +219,31 @@ cd1Input.onchange = function() {
   if(!cd1Input.files.length) return;
   currentCd1 = cd1Input.files[0];
   updateSlotsUI();
-  setStatus("CD Injected: " + currentCd1.name);
+  setStatus("CD 1 Injected: " + currentCd1.name);
   if(currentHda) buildEmulator(true);
 };
 btnCd1Eject.onclick = function() {
   currentCd1 = null;
   cd1Input.value = "";
   updateSlotsUI();
-  setStatus("CD Ejected");
+  setStatus("CD 1 Ejected");
+  if(currentHda) buildEmulator(true);
+};
+
+// ---- CD 2 操作 ----
+btnCd2Inject.onclick = function() { cd2Input.click(); };
+cd2Input.onchange = function() {
+  if(!cd2Input.files.length) return;
+  currentCd2 = cd2Input.files[0];
+  updateSlotsUI();
+  setStatus("CD 2 Injected: " + currentCd2.name);
+  if(currentHda) buildEmulator(true);
+};
+btnCd2Eject.onclick = function() {
+  currentCd2 = null;
+  cd2Input.value = "";
+  updateSlotsUI();
+  setStatus("CD 2 Ejected");
   if(currentHda) buildEmulator(true);
 };
 
@@ -289,9 +325,16 @@ function buildEmulator(autoStart){
     opts.fda = { buffer: currentFda };
   }
 
-  // 挂载 CD
-  if (currentCd1) {
-    opts.cdrom = { buffer: currentCd1 };
+  // 构建 CD 阵列
+  var cds = [];
+  if (currentCd1) cds.push({ buffer: currentCd1 });
+  if (currentCd2) cds.push({ buffer: currentCd2 });
+  
+  if (cds.length > 0) {
+    opts.cdrom = cds[0];
+    if (cds.length > 1) {
+      opts.cdroms = cds;
+    }
   }
 
   try{
