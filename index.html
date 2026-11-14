@@ -2,116 +2,45 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Titan1um - Windows 95 Emulator</title>
+<title>Titan1um - Web-based Emulator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  /* ---- Global & Layout ---- */
   html, body {
-    margin: 0;
-    padding: 0;
-    background: #000;
-    color: #ccc;
-    font-family: monospace;
-    height: 100%;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
+    margin: 0; padding: 0; background: #000; color: #ccc;
+    font-family: monospace; height: 100%; overflow: hidden;
+    display: flex; flex-direction: column;
   }
-  
-  /* ---- Topbar ---- */
   #topbar {
-    display: flex;
-    gap: 6px;
-    align-items: center;
-    padding: 6px 10px;
-    background: #111;
-    border-bottom: 1px solid #333;
-    flex-wrap: wrap;
-    font-size: 12px;
-    flex-shrink: 0;
+    display: flex; gap: 6px; align-items: center; padding: 6px 10px;
+    background: #111; border-bottom: 1px solid #333;
+    flex-wrap: wrap; font-size: 12px; flex-shrink: 0;
   }
   #topbar button, #topbar select, #topbar input[type=number] {
-    padding: 3px 8px;
-    background: #222;
-    color: #ddd;
-    border: 1px solid #444;
-    cursor: pointer;
-    font-size: 12px;
+    padding: 3px 8px; background: #222; color: #ddd;
+    border: 1px solid #444; cursor: pointer; font-size: 12px;
   }
-  #topbar button:disabled {
-    opacity: 0.4;
-    cursor: not-allowed;
-  }
+  #topbar button:disabled { opacity: 0.4; cursor: not-allowed; }
   #topbar label { color: #888; }
+  #brand { font-weight: bold; color: #4ea8de; letter-spacing: 1px; margin-right: 10px; font-size: 14px; }
+  #status { color: #888; margin-left: auto; }
   
-  /* Brand Logo */
-  #brand {
-    font-weight: bold;
-    color: #4ea8de;
-    letter-spacing: 1px;
-    margin-right: 10px;
-    font-size: 14px;
-  }
-
-  #status {
-    color: #888;
-    margin-left: auto;
-  }
-
-  /* ---- Downloader Panel ---- */
-  #dl_toggle {
-    padding: 3px 10px;
-    background: #222;
-    color: #ddd;
-    border: 1px solid #444;
-    cursor: pointer;
-    font-size: 12px;
-  }
-  #dl_panel {
-    display: none;
-    background: #0a0a0a;
-    border-bottom: 1px solid #333;
-    flex-shrink: 0;
-    height: 340px; 
-  }
-  #dl_panel iframe {
-    width: 100%;
-    height: 100%;
-    border: 0;
-    display: block;
-  }
-
-  /* ---- Screen Area ---- */
+  #dl_toggle { padding: 3px 10px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; }
+  #dl_panel { display: none; background: #0a0a0a; border-bottom: 1px solid #333; flex-shrink: 0; height: 340px; }
+  #dl_panel iframe { width: 100%; height: 100%; border: 0; display: block; }
+  
   #screen_wrap {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: #000;
-    overflow: hidden;
-    position: relative;
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    background: #000; overflow: hidden; position: relative;
   }
-
   #screen_container {
-    white-space: pre;
-    font: 14px monospace;
-    line-height: 14px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 100%;
-    height: 100%;
+    white-space: pre; font: 14px monospace; line-height: 14px;
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; height: 100%;
   }
-  
-  #screen_container > div {
-    display: none;
-  }
+  #screen_container > div { display: none; }
   #screen_container > canvas {
-    display: block;
-    background: #000;
-    max-width: 100%;
-    max-height: 100%;
-    object-fit: contain;
+    display: block; background: #000;
+    max-width: 100%; max-height: 100%; object-fit: contain;
   }
 </style>
 </head>
@@ -120,9 +49,19 @@
   <div id="topbar">
     <div id="brand">Titan1um</div>
     
+    <label>System:</label>
+    <select id="os_preset">
+      <option value="win95">Windows 95 / 98</option>
+      <option value="win2k">Windows 2000 (Standard PC)</option>
+      <option value="winxp">Windows XP (Standard PC, Very Slow)</option>
+      <option value="linux">Linux (CLI / Light)</option>
+      <option value="dos">DOS / KolibriOS</option>
+    </select>
+
     <label>HDA:</label><input type="file" id="hda_file" accept=".img,.iso,.bin">
     <label>CD:</label><input type="file" id="cd_file" accept=".iso">
     <label>RAM:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
+    
     <button id="btn_start" disabled>Start</button>
     <button id="btn_pause" disabled>Pause</button>
     <button id="btn_stop" disabled>Stop</button>
@@ -131,7 +70,7 @@
     <input type="file" id="state_file" accept=".bin" style="display:none">
     <button id="btn_load" disabled>Load State</button>
     
-    <button id="dl_toggle">Get Image ▼</button>
+    <button id="dl_toggle">Images & ISOs ▼</button>
     <span id="status">Ready</span>
   </div>
 
@@ -161,12 +100,23 @@ var hdaInput = document.getElementById("hda_file");
 var cdInput = document.getElementById("cd_file");
 var memInput = document.getElementById("mem_size");
 var stateInput = document.getElementById("state_file");
+var presetSelect = document.getElementById("os_preset");
 
 var dlToggle = document.getElementById("dl_toggle");
 var dlPanel = document.getElementById("dl_panel");
 
 var currentHda = null;
 var currentCd = null;
+
+// ---- 系统预设配置 ----
+var PROFILES = {
+  win95: { mem: 128, acpi: false },
+  win2k: { mem: 256, acpi: false },
+  winxp: { mem: 512, acpi: false },
+  linux: { mem: 256, acpi: true },
+  dos:   { mem: 64,  acpi: false }
+};
+var currentProfile = PROFILES.win95;
 
 function setStatus(s){ statusEl.textContent = s; console.log("[Titan1um]", s); }
 function setButtons(enabled){
@@ -178,14 +128,24 @@ function destroyEmulator(){
   emulator = null;
 }
 
-// ---- Downloader Panel Toggle ----
+// ---- 预设切换 ----
+presetSelect.addEventListener("change", function(e){
+  var key = e.target.value;
+  currentProfile = PROFILES[key] || PROFILES.win95;
+  memInput.value = currentProfile.mem;
+  setStatus("Profile: " + key + " (RAM: " + currentProfile.mem + "MB)");
+  // 如果已经选了 HDA，立刻重建模拟器以应用新配置
+  if(currentHda) buildEmulator(false);
+});
+
+// ---- 下载器面板折叠 ----
 dlToggle.onclick = function(){
   var isOpen = dlPanel.style.display === "block";
   dlPanel.style.display = isOpen ? "none" : "block";
-  dlToggle.textContent = isOpen ? "Get Image ▼" : "Get Image ▲";
+  dlToggle.textContent = isOpen ? "Images & ISOs ▼" : "Images & ISOs ▲";
 };
 
-// ---- Memory Persistence ----
+// ---- 内存持久化 (在预设基础上允许微调) ----
 function loadMemSetting(){
   var v = localStorage.getItem("titan1um_mem");
   if(v) memInput.value = v;
@@ -196,7 +156,7 @@ function saveMemSetting(){
 memInput.addEventListener("change", saveMemSetting);
 loadMemSetting();
 
-// ---- Select HDA ----
+// ---- 选 HDA ----
 hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
@@ -204,27 +164,29 @@ hdaInput.addEventListener("change", function(){
   buildEmulator(false);
 });
 
-// ---- Select CD ----
+// ---- 选 CD ----
 cdInput.addEventListener("change", function(){
   if(!cdInput.files.length) return;
   currentCd = cdInput.files[0];
-  setStatus("Selected CD: " + currentCd.name + ". Rebuilding emulator...");
+  setStatus("Selected CD: " + currentCd.name + ". Rebuilding...");
   if(currentHda) buildEmulator(true);
 });
 
-// ---- Build Emulator ----
+// ---- 构建模拟器 ----
 function buildEmulator(autoStart){
   if(!currentHda){ setStatus("Please select an HDA image first."); return; }
   destroyEmulator();
   
   screenContainer.innerHTML = '<div style="white-space:pre;font:14px monospace;line-height:14px"></div><canvas style="display:none"></canvas>';
   
-  var memMB = parseInt(memInput.value, 10) || 128;
+  // 优先使用用户手动输入的值，如果没有则使用预设的值
+  var memMB = parseInt(memInput.value, 10) || currentProfile.mem;
 
   var opts = {
     wasm_path: "v86.wasm",
     memory_size: memMB * 1024 * 1024,
     vga_memory_size: 8 * 1024 * 1024,
+    acpi: currentProfile.acpi,
     screen_container: screenContainer,
     bios: { url: "seabios.bin" },
     vga_bios: { url: "vgabios.bin" },
@@ -266,23 +228,13 @@ function bindListeners(){
   emulator.add_listener("emulator-stopped", function(){ setStatus("Stopped"); });
 }
 
-// ---- Control Buttons ----
-btnStart.onclick = function(){ 
-  if(emulator){ 
-    try{ emulator.run(); setStatus("Starting..."); }catch(e){ setStatus("Start failed: "+e.message); } 
-  } 
-};
-btnPause.onclick = function(){ 
-  if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } 
-};
-btnStop.onclick = function(){ 
-  if(emulator){ try{ emulator.stop(); setStatus("Stopped"); }catch(e){} } 
-};
-btnRestart.onclick = function(){ 
-  if(emulator){ try{ emulator.restart(); setStatus("Restarting..."); }catch(e){} } 
-};
+// ---- 控制按钮 ----
+btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("Starting..."); }catch(e){ setStatus("Start failed: "+e.message); } } };
+btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } };
+btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Stopped"); }catch(e){} } };
+btnRestart.onclick = function(){ if(emulator){ try{ emulator.restart(); setStatus("Restarting..."); }catch(e){} } };
 
-// ---- State Save & Load ----
+// ---- State 下载 / 加载 ----
 btnSave.onclick = async function(){
   if(!emulator) return;
   try{
