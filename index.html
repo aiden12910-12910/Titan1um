@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <title>Windows 95 on v86</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            background: #000;
+            color: #ccc;
+            font-family: monospace;
+            height: 100%;
+            overflow: hidden;
+        }
+        #topbar {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            padding: 8px 12px;
+            background: #111;
+            border-bottom: 1px solid #333;
+            flex-wrap: wrap;
+            font-size: 13px;
+        }
+        #topbar button {
+            padding: 4px 12px;
+            background: #222;
+            color: #ddd;
+            border: 1px solid #444;
+            cursor: pointer;
+        }
+        #topbar button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        #topbar input[type=file] {
+            color: #ccc;
+        }
+        #status {
+            color: #888;
+            margin-left: auto;
+        }
+        #screen_wrap {
+            position: absolute;
+            top: 46px;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #000;
+        }
+        #screen_container {
+            white-space: pre;
+            font: 14px monospace;
+            line-height: 14px;
+        }
+        #screen_container > div {
+            white-space: pre;
+            font: 14px monospace;
+            line-height: 14px;
+        }
+        #screen_container > canvas {
+            display: block;
+            background: #000;
+        }
+    </style>
+</head>
+<body>
+    <div id="topbar">
+        <input type="file" id="hda_file" accept=".img,.iso,.bin">
+        <button id="btn_start" disabled>启动</button>
+        <button id="btn_stop" disabled>停止</button>
+        <button id="btn_restart" disabled>重启</button>
+        <span id="status">请选择 windows95.img</span>
+    </div>
+
+    <div id="screen_wrap">
+        <div id="screen_container">
+            <div style="white-space: pre; font: 14px monospace; line-height: 14px"></div>
+            <canvas style="display: none"></canvas>
+        </div>
+    </div>
+
+    <script src="libv86.js"></script>
+    <script>
+        var emulator = null;
+        var statusEl = document.getElementById("status");
+        var fileInput = document.getElementById("hda_file");
+        var btnStart = document.getElementById("btn_start");
+        var btnStop = document.getElementById("btn_stop");
+        var btnRestart = document.getElementById("btn_restart");
+        var screenContainer = document.getElementById("screen_container");
+
+        function setStatus(s) {
+            statusEl.textContent = s;
+            console.log("[v86]", s);
+        }
+
+        function destroyEmulator() {
+            if (!emulator) return;
+            try { emulator.stop(); } catch (e) {}
+            emulator = null;
+        }
+
+        fileInput.addEventListener("change", function () {
+            if (!fileInput.files.length) return;
+            var file = fileInput.files[0];
+            setStatus("已选择: " + file.name + " (" + (file.size / 1024 / 1024).toFixed(1) + " MB)");
+
+            destroyEmulator();
+
+            // 清空 screen 容器，避免重复 canvas
+            screenContainer.innerHTML = '<div style="white-space: pre; font: 14px monospace; line-height: 14px"></div><canvas style="display: none"></canvas>';
+
+            try {
+                emulator = new V86({
+                    wasm_path: "v86.wasm",
+                    memory_size: 128 * 1024 * 1024,
+                    vga_memory_size: 8 * 1024 * 1024,
+                    screen_container: screenContainer,
+                    bios: { url: "seabios.bin" },
+                    vga_bios: { url: "vgabios.bin" },
+                    hda: { buffer: file },
+                    autostart: false,
+                });
+            } catch (e) {
+                setStatus("创建模拟器失败: " + e.message);
+                console.error(e);
+                return;
+            }
+
+            emulator.add_listener("emulator-ready", function () { setStatus("模拟器就绪"); });
+            emulator.add_listener("emulator-started", function () { setStatus("运行中"); });
+            emulator.add_listener("emulator-stopped", function () { setStatus("已停止"); });
+
+            btnStart.disabled = false;
+            btnStop.disabled = false;
+            btnRestart.disabled = false;
+            setStatus("模拟器已创建，点“启动”");
+        });
+
+        btnStart.addEventListener("click", function () {
+            if (!emulator) return;
+            try {
+                emulator.run();
+                setStatus("启动中...");
+            } catch (e) {
+                setStatus("启动失败: " + e.message);
+                console.error(e);
+            }
+        });
+
+        btnStop.addEventListener("click", function () {
+            if (!emulator) return;
+            try {
+                emulator.stop();
+                setStatus("已停止");
+            } catch (e) {
+                setStatus("停止失败: " + e.message);
+            }
+        });
+
+        btnRestart.addEventListener("click", function () {
+            if (!emulator) return;
+            try {
+                emulator.restart();
+                setStatus("重启中...");
+            } catch (e) {
+                setStatus("重启失败: " + e.message);
+            }
+        });
+    </script>
+</body>
+</html>
