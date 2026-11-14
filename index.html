@@ -125,7 +125,12 @@ function createWithUrl(url, memMB){
       screen_container: screenContainer,
       bios: { url: "seabios.bin" },
       vga_bios: { url: "vgabios.bin" },
-      hda: { url: url, async: true, use_parts: false },
+      hda: {
+        url: url,
+        async: true,
+        use_parts: true,
+        fixed_chunk_size: 1024 * 1024  // 每块 1MB，可以根据需要调整
+      },
       autostart: false
     });
   }catch(e){ setStatus("创建失败: " + e.message); console.error(e); return; }
