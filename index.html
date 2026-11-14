@@ -60,13 +60,9 @@ var memInput = document.getElementById("mem_size");
 var stateInput = document.getElementById("state_file");
 
 // ---- 预设配置 ----
-// 你建好 HF 仓库后，把下面的 "你的用户名/你的仓库" 换成真实值
 var PRESETS = {
   win95: {
-    // HF 文件直链（v86 需要的是能返回字节的 URL，不是 HF API 元数据接口）
-    // 格式：https://huggingface.co/{user}/{repo}/resolve/main/{file}
-    url: "https://huggingface.co/{aiden12910}/{Windows-web-sim-file-support}/resolve/main/windows95.img
-",
+    url: "https://huggingface.co/aiden12910/Windows-web-sim-file-support/resolve/main/windows95.img",
     mem: 128
   },
   winxp: null // 待添加
@@ -130,7 +126,7 @@ function createWithUrl(url, memMB){
         url: url,
         async: true,
         use_parts: true,
-        fixed_chunk_size: 1024 * 1024  // 每块 1MB，可以根据需要调整
+        fixed_chunk_size: 1024 * 1024
       },
       autostart: false
     });
@@ -205,7 +201,6 @@ cdInput.onchange = function(){
   if(!cdInput.files.length) return;
   if(!emulator){ setStatus("请先创建模拟器"); return; }
   setStatus("CD 动态挂载在 v86 中支持不完整，建议重启后作为 cdrom 配置项传入");
-  // 注意：v86 没有稳定的运行时 cdrom 切换 API，这里只提示，不实际挂载
 };
 
 setStatus("选择预设或上传镜像");
