@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <title>Titan1um - Windows 95 Emulator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
-  /* ---- 全局及布局修复 ---- */
+  /* ---- Global & Layout ---- */
   html, body {
     margin: 0;
     padding: 0;
@@ -15,10 +15,10 @@
     height: 100%;
     overflow: hidden;
     display: flex;
-    flex-direction: column; /* 让顶栏和屏幕区域上下排列 */
+    flex-direction: column;
   }
   
-  /* ---- 顶栏 ---- */
+  /* ---- Topbar ---- */
   #topbar {
     display: flex;
     gap: 6px;
@@ -26,9 +26,9 @@
     padding: 6px 10px;
     background: #111;
     border-bottom: 1px solid #333;
-    flex-wrap: wrap; /* 允许缩放时按钮换行 */
+    flex-wrap: wrap;
     font-size: 12px;
-    flex-shrink: 0; /* 保证顶栏不被压缩 */
+    flex-shrink: 0;
   }
   #topbar button, #topbar select, #topbar input[type=number] {
     padding: 3px 8px;
@@ -44,7 +44,7 @@
   }
   #topbar label { color: #888; }
   
-  /* 品牌 Logo 标识 */
+  /* Brand Logo */
   #brand {
     font-weight: bold;
     color: #4ea8de;
@@ -55,10 +55,10 @@
 
   #status {
     color: #888;
-    margin-left: auto; /* 把状态推到最右边 */
+    margin-left: auto;
   }
 
-  /* ---- 下载器面板 ---- */
+  /* ---- Downloader Panel ---- */
   #dl_toggle {
     padding: 3px 10px;
     background: #222;
@@ -72,7 +72,6 @@
     background: #0a0a0a;
     border-bottom: 1px solid #333;
     flex-shrink: 0;
-    /* 用 flex-basis 设置固定高度，防止撑满屏幕 */
     height: 340px; 
   }
   #dl_panel iframe {
@@ -82,9 +81,9 @@
     display: block;
   }
 
-  /* ---- 模拟器屏幕区域 ---- */
+  /* ---- Screen Area ---- */
   #screen_wrap {
-    flex: 1; /* 占据剩余的所有高度 */
+    flex: 1;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -104,16 +103,15 @@
     height: 100%;
   }
   
-  /* 修复比例问题的核心：让 canvas 保持比例并居中 */
   #screen_container > div {
-    display: none; /* v86 的文本后备层，通常隐藏 */
+    display: none;
   }
   #screen_container > canvas {
     display: block;
     background: #000;
     max-width: 100%;
     max-height: 100%;
-    object-fit: contain; /* 关键：保持比例，留黑边不拉伸 */
+    object-fit: contain;
   }
 </style>
 </head>
@@ -124,17 +122,17 @@
     
     <label>HDA:</label><input type="file" id="hda_file" accept=".img,.iso,.bin">
     <label>CD:</label><input type="file" id="cd_file" accept=".iso">
-    <label>内存:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
-    <button id="btn_start" disabled>启动</button>
-    <button id="btn_pause" disabled>暂停</button>
-    <button id="btn_stop" disabled>停止</button>
-    <button id="btn_restart" disabled>重启</button>
-    <button id="btn_save" disabled>下载 State</button>
+    <label>RAM:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
+    <button id="btn_start" disabled>Start</button>
+    <button id="btn_pause" disabled>Pause</button>
+    <button id="btn_stop" disabled>Stop</button>
+    <button id="btn_restart" disabled>Restart</button>
+    <button id="btn_save" disabled>Save State</button>
     <input type="file" id="state_file" accept=".bin" style="display:none">
-    <button id="btn_load" disabled>加载 State</button>
+    <button id="btn_load" disabled>Load State</button>
     
-    <button id="dl_toggle">获取镜像 ▼</button>
-    <span id="status">就绪</span>
+    <button id="dl_toggle">Get Image ▼</button>
+    <span id="status">Ready</span>
   </div>
 
   <div id="dl_panel">
@@ -180,14 +178,14 @@ function destroyEmulator(){
   emulator = null;
 }
 
-// ---- 下载器面板折叠 (配合 CSS Flexbox 布局) ----
+// ---- Downloader Panel Toggle ----
 dlToggle.onclick = function(){
   var isOpen = dlPanel.style.display === "block";
   dlPanel.style.display = isOpen ? "none" : "block";
-  dlToggle.textContent = isOpen ? "获取镜像 ▼" : "获取镜像 ▲";
+  dlToggle.textContent = isOpen ? "Get Image ▼" : "Get Image ▲";
 };
 
-// ---- 内存持久化 ----
+// ---- Memory Persistence ----
 function loadMemSetting(){
   var v = localStorage.getItem("titan1um_mem");
   if(v) memInput.value = v;
@@ -198,28 +196,27 @@ function saveMemSetting(){
 memInput.addEventListener("change", saveMemSetting);
 loadMemSetting();
 
-// ---- 选 HDA ----
+// ---- Select HDA ----
 hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
-  setStatus("已选 HDA: " + currentHda.name);
+  setStatus("Selected HDA: " + currentHda.name);
   buildEmulator(false);
 });
 
-// ---- 选 CD ----
+// ---- Select CD ----
 cdInput.addEventListener("change", function(){
   if(!cdInput.files.length) return;
   currentCd = cdInput.files[0];
-  setStatus("已选 CD: " + currentCd.name + "，重建模拟器");
+  setStatus("Selected CD: " + currentCd.name + ". Rebuilding emulator...");
   if(currentHda) buildEmulator(true);
 });
 
-// ---- 构建模拟器 ----
+// ---- Build Emulator ----
 function buildEmulator(autoStart){
-  if(!currentHda){ setStatus("请先选择 HDA 镜像"); return; }
+  if(!currentHda){ setStatus("Please select an HDA image first."); return; }
   destroyEmulator();
   
-  // 重置 canvas 容器
   screenContainer.innerHTML = '<div style="white-space:pre;font:14px monospace;line-height:14px"></div><canvas style="display:none"></canvas>';
   
   var memMB = parseInt(memInput.value, 10) || 128;
@@ -242,50 +239,50 @@ function buildEmulator(autoStart){
   try{
     emulator = new V86(opts);
   }catch(e){ 
-    setStatus("创建失败: " + e.message); 
+    setStatus("Build failed: " + e.message); 
     console.error(e); 
     return; 
   }
   
   bindListeners();
   setButtons(true);
-  setStatus("已创建，点启动");
+  setStatus("Created. Click Start.");
   
   if(autoStart){
     emulator.add_listener("emulator-ready", function(){
       try{ 
         emulator.run(); 
-        setStatus("启动中..."); 
+        setStatus("Starting..."); 
       }catch(e){ 
-        setStatus("启动失败: " + e.message); 
+        setStatus("Start failed: " + e.message); 
       }
     });
   }
 }
 
 function bindListeners(){
-  emulator.add_listener("emulator-ready", function(){ setStatus("就绪"); });
-  emulator.add_listener("emulator-started", function(){ setStatus("运行中"); });
-  emulator.add_listener("emulator-stopped", function(){ setStatus("已停止"); });
+  emulator.add_listener("emulator-ready", function(){ setStatus("Ready"); });
+  emulator.add_listener("emulator-started", function(){ setStatus("Running"); });
+  emulator.add_listener("emulator-stopped", function(){ setStatus("Stopped"); });
 }
 
-// ---- 控制按钮 ----
+// ---- Control Buttons ----
 btnStart.onclick = function(){ 
   if(emulator){ 
-    try{ emulator.run(); setStatus("启动中..."); }catch(e){ setStatus("启动失败: "+e.message); } 
+    try{ emulator.run(); setStatus("Starting..."); }catch(e){ setStatus("Start failed: "+e.message); } 
   } 
 };
 btnPause.onclick = function(){ 
-  if(emulator){ try{ emulator.stop(); setStatus("已暂停"); }catch(e){} } 
+  if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } 
 };
 btnStop.onclick = function(){ 
-  if(emulator){ try{ emulator.stop(); setStatus("已停止"); }catch(e){} } 
+  if(emulator){ try{ emulator.stop(); setStatus("Stopped"); }catch(e){} } 
 };
 btnRestart.onclick = function(){ 
-  if(emulator){ try{ emulator.restart(); setStatus("重启中..."); }catch(e){} } 
+  if(emulator){ try{ emulator.restart(); setStatus("Restarting..."); }catch(e){} } 
 };
 
-// ---- State 下载 / 加载 ----
+// ---- State Save & Load ----
 btnSave.onclick = async function(){
   if(!emulator) return;
   try{
@@ -295,8 +292,8 @@ btnSave.onclick = async function(){
     a.href = URL.createObjectURL(new Blob([state]));
     a.click();
     URL.revokeObjectURL(a.href);
-    setStatus("State 已下载 (" + state.byteLength + " bytes)");
-  }catch(e){ setStatus("保存失败: " + e.message); }
+    setStatus("State saved (" + state.byteLength + " bytes)");
+  }catch(e){ setStatus("Save failed: " + e.message); }
 };
 
 btnLoad.onclick = function(){ stateInput.click(); };
@@ -306,13 +303,13 @@ stateInput.onchange = function(){
   fr.onload = async function(e){
     try{
       await emulator.restore_state(e.target.result);
-      setStatus("State 已恢复");
-    }catch(err){ setStatus("恢复失败: " + err.message); }
+      setStatus("State restored");
+    }catch(err){ setStatus("Restore failed: " + err.message); }
   };
   fr.readAsArrayBuffer(stateInput.files[0]);
 };
 
-setStatus("请选择 HDA 镜像");
+setStatus("Please select an HDA image");
 </script>
 </body>
 </html>
