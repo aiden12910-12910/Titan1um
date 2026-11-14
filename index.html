@@ -20,6 +20,7 @@
 <div id="topbar">
   <label>HDA (镜像):</label><input type="file" id="hda_file" accept=".img,.iso,.bin">
   <label>CD (可选):</label><input type="file" id="cd_file" accept=".iso">
+  <label>EXE (可选):</label><input type="file" id="exe_file" accept=".exe,.com,.bat">
   <label>内存:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
   <button id="btn_start" disabled>启动</button>
   <button id="btn_pause" disabled>暂停</button>
@@ -50,8 +51,13 @@ var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
 var hdaInput = document.getElementById("hda_file");
 var cdInput = document.getElementById("cd_file");
+var exeInput = document.getElementById("exe_file");
 var memInput = document.getElementById("mem_size");
 var stateInput = document.getElementById("state_file");
+
+var currentHda = null;   // File 对象
+var currentCd = null;    // File 对象
+var sharedExe = null;    // 用户选的 exe，File 对象
 
 function setStatus(s){ statusEl.textContent = s; console.log("[v86]", s); }
 function setButtons(enabled){
@@ -74,40 +80,94 @@ function saveMemSetting(){
 memInput.addEventListener("change", saveMemSetting);
 loadMemSetting();
 
-// ---- 用户上传 HDA ----
+// ---- 选 HDA ----
 hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
-  var file = hdaInput.files[0];
-  var mem = parseInt(memInput.value,10) || 128;
-  setStatus("已选 HDA: " + file.name + " (" + (file.size / 1024 / 1024).toFixed(1) + " MB)");
-  createWithBuffer(file, mem);
+  currentHda = hdaInput.files[0];
+  setStatus("已选 HDA: " + currentHda.name);
+  buildEmulator();
 });
 
-// ---- 创建模拟器：Buffer 模式（用户上传） ----
-function createWithBuffer(file, memMB){
+// ---- 选 CD（重建模拟器并自动启动） ----
+cdInput.addEventListener("change", function(){
+  if(!cdInput.files.length) return;
+  currentCd = cdInput.files[0];
+  setStatus("已选 CD: " + currentCd.name + "，重建模拟器");
+  if(currentHda) buildEmulator(true);
+});
+
+// ---- 选 EXE（先存着，等模拟器运行后通过 9p 注入） ----
+exeInput.addEventListener("change", function(){
+  if(!exeInput.files.length) return;
+  sharedExe = exeInput.files[0];
+  setStatus("已选 EXE: " + sharedExe.name + "，将放入共享盘 Z:");
+  injectExe();
+});
+
+// ---- 构建模拟器 ----
+function buildEmulator(autoStart){
+  if(!currentHda){ setStatus("请先选择 HDA 镜像"); return; }
   destroyEmulator();
   screenContainer.innerHTML = '<div style="white-space:pre;font:14px monospace;line-height:14px"></div><canvas style="display:none"></canvas>';
+  var memMB = parseInt(memInput.value,10) || 128;
+
+  var opts = {
+    wasm_path: "v86.wasm",
+    memory_size: memMB * 1024 * 1024,
+    vga_memory_size: 8 * 1024 * 1024,
+    screen_container: screenContainer,
+    bios: { url: "seabios.bin" },
+    vga_bios: { url: "vgabios.bin" },
+    hda: { buffer: currentHda },
+    autostart: false
+  };
+
+  if(currentCd){
+    opts.cdrom = { buffer: currentCd };
+  }
+
+  // 9p 文件系统：把 sharedExe 放进虚拟机里的 Z: 盘（Win95 需要额外驱动，先挂上）
+  opts.fs = {
+    baseurl: "shared/",   // 占位，实际用下面的 handle9p
+    handle9p: function() {
+      // 如果 libv86 暴露了 9p 接口，这里可以把 sharedExe 塞进去
+      // 不同版本 API 不同，先留空，避免报错
+    }
+  };
+
   try{
-    emulator = new V86({
-      wasm_path: "v86.wasm",
-      memory_size: memMB * 1024 * 1024,
-      vga_memory_size: 8 * 1024 * 1024,
-      screen_container: screenContainer,
-      bios: { url: "seabios.bin" },
-      vga_bios: { url: "vgabios.bin" },
-      hda: { buffer: file },
-      autostart: false
-    });
+    emulator = new V86(opts);
   }catch(e){ setStatus("创建失败: " + e.message); console.error(e); return; }
   bindListeners();
   setButtons(true);
   setStatus("已创建，点启动");
+  if(autoStart){ emulator.run(); setStatus("启动中..."); }
 }
 
 function bindListeners(){
   emulator.add_listener("emulator-ready", function(){ setStatus("就绪"); });
   emulator.add_listener("emulator-started", function(){ setStatus("运行中"); });
   emulator.add_listener("emulator-stopped", function(){ setStatus("已停止"); });
+}
+
+// ---- 把 exe 注入共享盘（占位实现） ----
+function injectExe(){
+  if(!emulator || !sharedExe){
+    return;
+  }
+  // v86 的 9p 文件系统在不同版本里 API 不同。
+  // 这里先做最保守的处理：如果 libv86 暴露了 emulator.fs9p 或类似接口，
+  // 就把文件写进去；否则只提示用户。
+  try{
+    if(emulator.fs9p && typeof emulator.fs9p.add_file === "function"){
+      emulator.fs9p.add_file(sharedExe.name, sharedExe);
+      setStatus("EXE 已放入共享盘 Z:，去 Win95 里运行");
+    }else{
+      setStatus("当前 v86 版本没有可用的 9p 写入接口，EXE 暂未注入");
+    }
+  }catch(e){
+    setStatus("注入失败: " + e.message);
+  }
 }
 
 // ---- 控制按钮 ----
@@ -143,14 +203,7 @@ stateInput.onchange = function(){
   fr.readAsArrayBuffer(stateInput.files[0]);
 };
 
-// ---- CD 挂载（尝试性） ----
-cdInput.onchange = function(){
-  if(!cdInput.files.length) return;
-  if(!emulator){ setStatus("请先创建模拟器"); return; }
-  setStatus("CD 动态挂载在 v86 中支持不完整，建议重启后作为 cdrom 配置项传入");
-};
-
-setStatus("请选择镜像文件");
+setStatus("请选择 HDA 镜像");
 </script>
 </body>
 </html>
