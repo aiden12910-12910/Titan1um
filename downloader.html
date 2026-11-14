@@ -28,16 +28,16 @@
   <p><a href="https://github.com/aiden12910-12910/Windows95/releases/download/img/windows95.img" target="_blank" rel="noopener">直接下载 windows95.img →</a></p>
 </div>
 
-<h2>EXE 转 ISO（在 Win95 里当 CD 用）</h2>
+<h2>文件夹转 ISO（支持子目录，在 Win95 里当 CD 用）</h2>
 
 <div class="box">
-  <p>把一个或多个 <code>.exe</code> / 文件拖进来，生成一个 <code>.iso</code>，然后在 v86 页面里把它选为 CD。</p>
+  <p>选择一个文件夹（会递归包含所有子目录和文件），生成一个 <code>.iso</code>，然后在 v86 页面里把它选为 CD。</p>
   <p>
-    <input type="file" id="iso_files" multiple style="color:#ddd">
+    <input type="file" id="iso_dir" webkitdirectory directory multiple style="color:#ddd">
     <button id="btn_build_iso" type="button" style="padding:4px 12px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace">生成 ISO</button>
     <button id="btn_save_iso" type="button" disabled style="padding:4px 12px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace">保存 ISO 到本地</button>
   </p>
-  <div id="iso_log" class="hint">等待选择文件</div>
+  <div id="iso_log" class="hint">等待选择文件夹</div>
 </div>
 
 <p class="hint">
@@ -47,15 +47,11 @@
 </p>
 
 <script>
-// ---- 极简 ISO9660 生成器 ----
-// 只支持一个根目录，文件名 ASCII，大小 < 4GB，足够把 exe 塞进 CD 给 Win95 用。
-// 不是完整 ISO9660 实现，但 Win95 能识别。
-
 var SECTOR = 2048;
 var isoBlob = null;
 var isoName = "data.iso";
 
-var isoFilesInput = document.getElementById("iso_files");
+var isoDirInput = document.getElementById("iso_dir");
 var btnBuildIso = document.getElementById("btn_build_iso");
 var btnSaveIso = document.getElementById("btn_save_iso");
 var isoLog = document.getElementById("iso_log");
@@ -64,65 +60,136 @@ function isoLogSet(s){ isoLog.textContent = s; console.log("[iso]", s); }
 
 function writeU16(view, off, v){ view.setUint16(off, v, true); view.setUint16(off + 2, v, false); }
 function writeU32(view, off, v){ view.setUint32(off, v, true); view.setUint32(off + 4, v, false); }
+function fillSpaces(out, off, len){ for(var i = 0; i < len; i++) out[off + i] = 0x20; }
 
-// 构建 ISO9660 镜像
-async function buildIso(files){
-  // 读所有文件到 ArrayBuffer
-  var entries = [];
-  for(var i = 0; i < files.length; i++){
-    var f = files[i];
-    var buf = await f.arrayBuffer();
-    entries.push({ name: f.name.toUpperCase(), data: new Uint8Array(buf) });
+// ---- 目录树 ----
+function buildTree(files){
+  var root = { name: "", children: {}, files: [] };
+  files.forEach(function(f){
+    var path = f.webkitRelativePath || f.name;
+    var parts = path.split("/").filter(Boolean);
+    // 去掉最顶层文件夹名，保留其内容作为根
+    if(parts.length > 1) parts = parts.slice(1);
+    var cur = root;
+    for(var i = 0; i < parts.length - 1; i++){
+      var p = parts[i];
+      if(!cur.children[p]) cur.children[p] = { name: p, children: {}, files: [] };
+      cur = cur.children[p];
+    }
+    cur.files.push({ name: parts[parts.length - 1], file: f });
+  });
+  return root;
+}
+
+// 计算目录项数量（. 和 .. + 子目录 + 文件）
+function countDirRecords(dir){
+  var n = 2;
+  Object.keys(dir.children).forEach(function(k){ n += 1 + countDirRecords(dir.children[k]); });
+  n += dir.files.length;
+  return n;
+}
+// 计算目录所需扇区数
+function dirSectors(dir){
+  var records = [];
+  // 先遍历收集所有记录长度
+  function walk(d){
+    records.push(34); // .
+    records.push(34); // ..
+    Object.keys(d.children).forEach(function(k){ records.push(34 + k.length + (k.length % 2 === 0 ? 1 : 0)); walk(d.children[k]); });
+    d.files.forEach(function(f){ records.push(34 + f.name.length + (f.name.length % 2 === 0 ? 1 : 0)); });
   }
+  walk(dir);
+  var total = records.reduce(function(a, b){ return a + b; }, 0);
+  return Math.max(1, Math.ceil(total / SECTOR));
+}
 
-  // 计算目录和布局
-  // PVD 占 1 扇区（16），终止卷描述符占 1 扇区（17），根目录从 18 开始
-  var rootDirSectors = Math.max(1, Math.ceil((34 + entries.length * 34) / SECTOR));
-  var dataStartSector = 18 + rootDirSectors;
+// 写目录记录
+function writeDirRecord(out, view, off, sector, size, isDir, name, nameLen){
+  var nb = name ? new TextEncoder().encode(name.toUpperCase()) : new Uint8Array([0]);
+  var recLen = 33 + nb.length + (nb.length % 2 === 0 ? 1 : 0);
+  view.setUint8(off, recLen);
+  view.setUint8(off + 1, 0);
+  writeU32(view, off + 2, sector);
+  writeU32(view, off + 10, size || 0);
+  out.set([0,0,0,0,0,0,0], off + 18);
+  view.setUint8(off + 25, isDir ? 0x02 : 0x00);
+  view.setUint8(off + 26, 0);
+  view.setUint8(off + 27, 0);
+  writeU16(view, off + 28, 1);
+  view.setUint8(off + 30, nb.length);
+  out.set(nb, off + 33);
+  for(var i = 0; i < recLen - (33 + nb.length); i++) out[off + 33 + nb.length + i] = 0;
+  return recLen;
+}
 
-  var totalSectors = dataStartSector;
-  entries.forEach(function(e){
-    e.sector = totalSectors;
-    e.sectors = Math.ceil(e.data.length / SECTOR);
-    totalSectors += e.sectors;
+async function buildIso(files){
+  var root = buildTree(files);
+
+  // 收集所有文件数据
+  var fileEntries = [];
+  async function collect(dir){
+    for(var i = 0; i < dir.files.length; i++){
+      var f = dir.files[i];
+      var buf = await f.file.arrayBuffer();
+      fileEntries.push({ name: f.name, data: new Uint8Array(buf) });
+    }
+    var keys = Object.keys(dir.children);
+    for(var j = 0; j < keys.length; j++) await collect(dir.children[keys[j]]);
+  }
+  await collect(root);
+
+  // 分配扇区：16 PVD, 17 终止符, 18 根目录, 然后子目录，然后文件数据
+  var rootSec = 18;
+  var rootSectors = dirSectors(root);
+  var cur = 18 + rootSectors;
+
+  var dirSectorMap = new Map();
+  dirSectorMap.set(root, { sector: rootSec, sectors: rootSectors });
+
+  function allocDirs(dir){
+    var keys = Object.keys(dir.children);
+    keys.forEach(function(k){
+      var child = dir.children[k];
+      var secs = dirSectors(child);
+      dirSectorMap.set(child, { sector: cur, sectors: secs });
+      cur += secs;
+      allocDirs(child);
+    });
+  }
+  allocDirs(root);
+
+  var dataStart = cur;
+  var fileSectorMap = new Map();
+  fileEntries.forEach(function(e){
+    e.sector = cur;
+    e.sectors = Math.max(1, Math.ceil(e.data.length / SECTOR));
+    fileSectorMap.set(e.name, e);
+    cur += e.sectors;
   });
 
+  var totalSectors = cur;
   var totalBytes = totalSectors * SECTOR;
   var out = new Uint8Array(totalBytes);
   var view = new DataView(out.buffer);
 
-  // ---- 系统区（0-15 扇区）全 0 ----
-
-  // ---- PVD（扇区 16） ----
+  // ---- PVD ----
   var pvd = 16 * SECTOR;
-  view.setUint8(pvd, 0x01); // 类型：主卷描述符
-  out.set([0x43,0x44,0x30,0x30,0x31], pvd + 1); // "CD001"
-  view.setUint8(pvd + 6, 0x01); // 版本
-  // 系统标识（空）
+  view.setUint8(pvd, 0x01);
+  out.set([0x43,0x44,0x30,0x30,0x31], pvd + 1);
+  view.setUint8(pvd + 6, 0x01);
   fillSpaces(out, pvd + 8, 32);
-  // 卷标识
   fillSpaces(out, pvd + 40, 32);
-  // 卷空间大小
   writeU32(view, pvd + 80, totalSectors);
-  // 卷集大小
   writeU16(view, pvd + 120, 1);
-  // 卷序列号
   writeU16(view, pvd + 124, 1);
-  // 逻辑块大小
   writeU16(view, pvd + 128, SECTOR);
-  // 路径表大小
   writeU32(view, pvd + 132, 0);
-  // 根目录记录（L 路径表位置，占位）
   writeU32(view, pvd + 140, 0);
-  // 根目录记录（M 路径表位置，占位）
   writeU32(view, pvd + 148, 0);
-  // 根目录记录（34 字节）
-  writeDirRecord(out, view, pvd + 156, 18, rootDirSectors, true);
-  // 卷集标识、出版者、数据准备者（空）
+  writeDirRecord(out, view, pvd + 156, rootSec, rootSectors * SECTOR, true, "\0", 1);
   fillSpaces(out, pvd + 190, 128);
   fillSpaces(out, pvd + 318, 128);
   fillSpaces(out, pvd + 446, 128);
-  // 应用标识、版权、摘要、书目、日期（空）
   fillSpaces(out, pvd + 574, 128);
   fillSpaces(out, pvd + 702, 37);
   fillSpaces(out, pvd + 739, 37);
@@ -130,71 +197,72 @@ async function buildIso(files){
   fillSpaces(out, pvd + 813, 17);
   fillSpaces(out, pvd + 830, 17);
 
-  // ---- 卷描述符终止符（扇区 17） ----
+  // ---- 终止符 ----
   var term = 17 * SECTOR;
   view.setUint8(term, 0xFF);
   out.set([0x43,0x44,0x30,0x30,0x31], term + 1);
 
-  // ---- 根目录（扇区 18 开始） ----
-  var dirOff = 18 * SECTOR;
-  // "." 目录项
-  writeDirRecord(out, view, dirOff, 18, rootDirSectors, true);
-  // ".." 目录项
-  writeDirRecord(out, view, dirOff + 34, 18, rootDirSectors, true);
-  // 文件项
-  var pos = dirOff + 68;
-  entries.forEach(function(e){
-    writeDirRecord(out, view, pos, e.sector, e.sectors, false, e.name, e.data.length);
-    pos += 34 + padName(e.name).length;
-    // 如果文件名超过 1 个扇区的记录长度，这里简化处理，不跨扇区
-  });
+  // ---- 写目录 ----
+  function writeDir(dir, offset){
+    var secInfo = dirSectorMap.get(dir);
+    var pos = offset;
+    // .
+    pos += writeDirRecord(out, view, pos, secInfo.sector, secInfo.sectors * SECTOR, true, "\0", 1);
+    // ..
+    var parent = dir.parent || dir;
+    var psec = dirSectorMap.get(parent);
+    pos += writeDirRecord(out, view, pos, psec.sector, psec.sectors * SECTOR, true, "\1", 1);
+    // 子目录
+    var keys = Object.keys(dir.children);
+    keys.forEach(function(k){
+      var child = dir.children[k];
+      var ci = dirSectorMap.get(child);
+      pos += writeDirRecord(out, view, pos, ci.sector, ci.sectors * SECTOR, true, k, k.length);
+    });
+    // 文件
+    dir.files.forEach(function(f){
+      var fe = fileSectorMap.get(f.name);
+      pos += writeDirRecord(out, view, pos, fe.sector, fe.data.length, false, f.name, f.name.length);
+    });
+  }
 
-  // ---- 文件数据 ----
-  entries.forEach(function(e){
+  // 设置 parent 指针
+  function setParents(dir, parent){
+    dir.parent = parent;
+    Object.keys(dir.children).forEach(function(k){ setParents(dir.children[k], dir); });
+  }
+  setParents(root, root);
+
+  writeDir(root, rootSec * SECTOR);
+  function writeSubdirs(dir){
+    Object.keys(dir.children).forEach(function(k){
+      var child = dir.children[k];
+      var ci = dirSectorMap.get(child);
+      writeDir(child, ci.sector * SECTOR);
+      writeSubdirs(child);
+    });
+  }
+  writeSubdirs(root);
+
+  // ---- 写文件数据 ----
+  fileEntries.forEach(function(e){
     out.set(e.data, e.sector * SECTOR);
   });
 
   return new Blob([out], { type: "application/x-iso9660-image" });
 }
 
-function fillSpaces(out, off, len){
-  for(var i = 0; i < len; i++) out[off + i] = 0x20;
-}
-function padName(name){
-  // ISO9660 文件名后面可能有 ";1" 版本号，这里简化不加
-  return name;
-}
-function writeDirRecord(out, view, off, sector, sectors, isDir, name, size){
-  var nameBytes = name ? new TextEncoder().encode(name) : new Uint8Array([0]);
-  if(!name){ nameBytes = new Uint8Array([0]); }
-  var recLen = 33 + nameBytes.length + (nameBytes.length % 2 === 0 ? 1 : 0);
-  view.setUint8(off, recLen);
-  view.setUint8(off + 1, 0); // 扩展属性长度
-  writeU32(view, off + 2, sector);
-  writeU32(view, off + 10, size || 0);
-  // 日期（7 字节，全 0 也行）
-  out.set([0,0,0,0,0,0,0], off + 18);
-  view.setUint8(off + 25, isDir ? 0x02 : 0x00);
-  view.setUint8(off + 26, 0);
-  view.setUint8(off + 27, 0);
-  writeU16(view, off + 28, 1);
-  view.setUint8(off + 30, nameBytes.length);
-  out.set(nameBytes, off + 33);
-  // 记录长度补齐
-  var pad = recLen - (33 + nameBytes.length);
-  for(var i = 0; i < pad; i++) out[off + 33 + nameBytes.length + i] = 0;
-}
-
 // ---- 事件 ----
 btnBuildIso.onclick = async function(){
-  if(!isoFilesInput.files.length){ isoLogSet("请先选择文件"); return; }
+  if(!isoDirInput.files.length){ isoLogSet("请先选择文件夹"); return; }
   btnBuildIso.disabled = true;
   btnSaveIso.disabled = true;
-  isoLogSet("正在生成 ISO...");
+  isoLogSet("正在生成 ISO（含子目录）...");
   try{
-    var blob = await buildIso(Array.from(isoFilesInput.files));
+    var blob = await buildIso(Array.from(isoDirInput.files));
     isoBlob = blob;
-    isoName = (isoFilesInput.files[0].name.split(".")[0] || "data") + ".iso";
+    var base = isoDirInput.files[0].webkitRelativePath.split("/")[0] || "data";
+    isoName = base + ".iso";
     isoLogSet("生成完成：" + (blob.size / 1024 / 1024).toFixed(2) + " MB，点“保存 ISO 到本地”");
     btnSaveIso.disabled = false;
   }catch(e){
