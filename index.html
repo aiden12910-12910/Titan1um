@@ -40,10 +40,17 @@
     width: 100%; height: 100%;
   }
   #screen_container > div { display: none; }
+  
+  /* 防止画面模糊，强制像素渲染 */
   #screen_container > canvas {
     display: block; background: #000;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    image-rendering: -moz-crisp-edges;
+    image-rendering: -webkit-optimize-contrast;
     max-width: 100%; max-height: 100%; object-fit: contain;
   }
+
   body.is-fullscreen #topbar { display: none; }
   body.is-fullscreen #screen_wrap { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; }
   
@@ -54,7 +61,6 @@
   }
   .file-btn:hover { background: #333; border-color: #666; }
   
-  /* 自定义系统输入框默认隐藏 */
   #custom_os_name { display: none; width: 120px; }
 </style>
 </head>
@@ -73,7 +79,7 @@
 
     <label>Profile:</label>
     <select id="os_preset" title="Select specific OS profile"></select>
-    <input type="text" id="custom_os_name" placeholder="Custom OS Name" title="Enter custom OS name (e.g., Win2000)">
+    <input type="text" id="custom_os_name" placeholder="Custom OS" title="Enter custom OS name">
 
     <label>HDA:</label>
     <button class="file-btn" onclick="document.getElementById('hda_file').click()" title="Select Hard Disk Image (HDA)">Choose File</button>
@@ -82,10 +88,19 @@
 
     <label>RAM:</label>
     <input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px" title="Memory size in MB">
+
+    <label>Scale:</label>
+    <select id="scale_select" title="Force integer scaling to keep text sharp">
+      <option value="fit">Fit (Smooth)</option>
+      <option value="1">1x</option>
+      <option value="2">2x</option>
+      <option value="3">3x</option>
+      <option value="4">4x</option>
+    </select>
     
     <div class="cd-group">
       <label>Floppy:</label>
-      <button id="btn_fda_inject" class="file-btn" title="Insert Floppy Image (.img / .ima)">Inject</button>
+      <button id="btn_fda_inject" class="file-btn" title="Insert Floppy Image">Inject</button>
       <button id="btn_fda_eject" disabled title="Eject Floppy">Eject</button>
       <input type="file" id="fda_file" class="hidden-file" accept=".img,.ima">
       <span id="fda_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
@@ -93,31 +108,31 @@
 
     <div class="cd-group">
       <label>CD 1:</label>
-      <button id="btn_cd1_inject" class="file-btn" title="Insert CD-ROM Image (.iso) into Slot 1">Inject</button>
-      <button id="btn_cd1_eject" disabled title="Eject CD from Slot 1">Eject</button>
+      <button id="btn_cd1_inject" class="file-btn" title="Insert CD-ROM Image into Slot 1">Inject</button>
+      <button id="btn_cd1_eject" disabled title="Eject CD 1">Eject</button>
       <input type="file" id="cd1_file" class="hidden-file" accept=".iso">
       <span id="cd1_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
     </div>
 
     <div class="cd-group">
       <label>CD 2:</label>
-      <button id="btn_cd2_inject" class="file-btn" title="Insert CD-ROM Image (.iso) into Slot 2">Inject</button>
-      <button id="btn_cd2_eject" disabled title="Eject CD from Slot 2">Eject</button>
+      <button id="btn_cd2_inject" class="file-btn" title="Insert CD-ROM Image into Slot 2">Inject</button>
+      <button id="btn_cd2_eject" disabled title="Eject CD 2">Eject</button>
       <input type="file" id="cd2_file" class="hidden-file" accept=".iso">
       <span id="cd2_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
     </div>
 
     <button id="btn_start" disabled title="Power On / Resume Emulator">Start</button>
-    <button id="btn_pause" disabled title="Pause Emulator (Keeps RAM state)">Pause</button>
+    <button id="btn_pause" disabled title="Pause Emulator">Pause</button>
     <button id="btn_stop" disabled title="Power Off Emulator">Stop</button>
-    <button id="btn_restart" disabled title="Hard Reset (Power Cycle - Safe)">Restart</button>
+    <button id="btn_restart" disabled title="Hard Reset (Power Cycle)">Restart</button>
     
-    <button id="btn_save" disabled title="Download Snapshot (State + Disk) to your computer">Save State</button>
+    <button id="btn_save" disabled title="Download Snapshot (State + Disk)">Save State</button>
     <input type="file" id="state_file" class="hidden-file" accept=".bin">
-    <button id="btn_load" disabled title="Load Snapshot from local computer">Load State</button>
-    <button id="btn_export_hda" disabled title="Download modified Hard Disk Image (HDA) with all your files" style="color: #4ea8de; border-color: #4ea8de;">Export HDA</button>
+    <button id="btn_load" disabled title="Load Snapshot">Load State</button>
+    <button id="btn_export_hda" disabled title="Download modified Hard Disk Image (HDA)" style="color: #4ea8de; border-color: #4ea8de;">Export HDA</button>
     
-    <button id="btn_fullscreen" title="Toggle Fullscreen (Theater Mode)">Theater Mode</button>
+    <button id="btn_fullscreen" title="Toggle Fullscreen">Theater Mode</button>
     <button id="dl_toggle" title="Download Games and OS Images">Images & Games ▼</button>
     <span id="status">Ready</span>
   </div>
@@ -154,6 +169,7 @@ var stateInput = document.getElementById("state_file");
 var categorySelect = document.getElementById("category_select");
 var presetSelect = document.getElementById("os_preset");
 var customOsName = document.getElementById("custom_os_name");
+var scaleSelect = document.getElementById("scale_select");
 var dlToggle = document.getElementById("dl_toggle");
 var dlPanel = document.getElementById("dl_panel");
 
@@ -178,26 +194,20 @@ var currentCd1 = null;
 var currentCd2 = null;
 var currentProfile = null;
 
-// ---- 系统预设数据库 ----
 var SYSTEMS = {
   windows: [
     { id: "win95", name: "Windows 95 / 98", mem: 128, acpi: false },
-    { id: "winxp", name: "Windows XP (Requires Standard PC)", mem: 512, acpi: false }
+    { id: "winxp", name: "Windows XP", mem: 512, acpi: false }
   ],
-  linux: [
-    { id: "linux_cli", name: "Linux CLI (Alpine)", mem: 256, acpi: true }
-  ],
-  android: [
-    { id: "android_x86", name: "Android x86 4.4 (Experimental)", mem: 512, acpi: true }
-  ],
+  linux: [{ id: "linux_cli", name: "Linux CLI (Alpine)", mem: 256, acpi: true }],
+  android: [{ id: "android_x86", name: "Android x86 (Experimental)", mem: 512, acpi: true }],
   other: [
     { id: "dos", name: "DOS / FreeDOS", mem: 64, acpi: false },
     { id: "kolibrios", name: "KolibriOS", mem: 64, acpi: false },
-    { id: "custom", name: "Custom OS (User Defined)", mem: 128, acpi: false }
+    { id: "custom", name: "Custom OS", mem: 128, acpi: false }
   ]
 };
 
-// ---- 动态渲染下拉菜单 ----
 function updateCategoryMenu() {
   var cat = categorySelect.value;
   presetSelect.innerHTML = "";
@@ -208,8 +218,6 @@ function updateCategoryMenu() {
     var opt = document.createElement("option");
     opt.value = sys.id;
     opt.textContent = sys.name;
-    opt.dataset.mem = sys.mem;
-    opt.dataset.acpi = sys.acpi;
     presetSelect.appendChild(opt);
   });
 
@@ -222,21 +230,16 @@ function updateCategoryMenu() {
 function applyProfile(sysObj) {
   currentProfile = sysObj;
   memInput.value = sysObj.mem;
-  
-  // 如果选的是自定义，显示输入框
   if (sysObj.id === "custom") {
     customOsName.style.display = "inline-block";
-    customOsName.focus();
   } else {
     customOsName.style.display = "none";
   }
-
+  // 切换配置时，只静默重建，不启动
   if (currentHda) buildEmulator(false);
 }
 
-// ---- 绑定 UI 事件 ----
 categorySelect.addEventListener("change", updateCategoryMenu);
-
 presetSelect.addEventListener("change", function() {
   var cat = categorySelect.value;
   var selectedId = presetSelect.value;
@@ -265,16 +268,16 @@ function updateSlotsUI() {
   btnCd2Eject.disabled = !currentCd2;
 }
 
-// ---- 挂载操作 ----
+// ---- 挂载操作 (全部改为 false) ----
 btnFdaInject.onclick = function() { fdaInput.click(); };
 fdaInput.onchange = function() {
   if(!fdaInput.files.length) return;
   currentFda = fdaInput.files[0];
   updateSlotsUI();
-  if(currentHda) buildEmulator(true);
+  if(currentHda) buildEmulator(false); 
 };
 btnFdaEject.onclick = function() {
-  currentFda = null; fdaInput.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(true);
+  currentFda = null; fdaInput.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(false);
 };
 
 btnCd1Inject.onclick = function() { cd1Input.click(); };
@@ -282,10 +285,10 @@ cd1Input.onchange = function() {
   if(!cd1Input.files.length) return;
   currentCd1 = cd1Input.files[0];
   updateSlotsUI();
-  if(currentHda) buildEmulator(true);
+  if(currentHda) buildEmulator(false);
 };
 btnCd1Eject.onclick = function() {
-  currentCd1 = null; cd1Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(true);
+  currentCd1 = null; cd1Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(false);
 };
 
 btnCd2Inject.onclick = function() { cd2Input.click(); };
@@ -293,11 +296,33 @@ cd2Input.onchange = function() {
   if(!cd2Input.files.length) return;
   currentCd2 = cd2Input.files[0];
   updateSlotsUI();
-  if(currentHda) buildEmulator(true);
+  if(currentHda) buildEmulator(false);
 };
 btnCd2Eject.onclick = function() {
-  currentCd2 = null; cd2Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(true);
+  currentCd2 = null; cd2Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(false);
 };
+
+// ---- 缩放控制核心逻辑 ----
+function applyScale() {
+  var canvas = document.getElementById("screen_container").querySelector("canvas");
+  if (!canvas) return;
+  
+  var scale = scaleSelect.value;
+  if (scale === "fit") {
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.objectFit = "contain";
+  } else {
+    var multiplier = parseInt(scale);
+    var baseW = canvas.width || 640; 
+    var baseH = canvas.height || 480;
+    
+    canvas.style.width = (baseW * multiplier) + "px";
+    canvas.style.height = (baseH * multiplier) + "px";
+    canvas.style.objectFit = "none";
+  }
+}
+scaleSelect.addEventListener("change", applyScale);
 
 // ---- 全屏 ----
 btnFullscreen.onclick = function() {
@@ -327,7 +352,7 @@ hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
   hdaName.textContent = currentHda.name;
-  buildEmulator(false);
+  buildEmulator(false); // 这里也绝对不能自动启动
 });
 
 // ---- 构建模拟器 ----
@@ -349,7 +374,7 @@ function buildEmulator(autoStart){
     bios: { url: "seabios.bin" },
     vga_bios: { url: "vgabios.bin" },
     hda: { buffer: currentHda },
-    autostart: false
+    autostart: false // 明确关闭自动启动
   };
 
   if (currentFda) opts.fda = { buffer: currentFda };
@@ -369,7 +394,10 @@ function buildEmulator(autoStart){
     return; 
   }
   
-  emulator.add_listener("emulator-ready", function(){ setStatus("Ready"); });
+  emulator.add_listener("emulator-ready", function(){ 
+    setStatus("Ready"); 
+    applyScale(); 
+  });
   emulator.add_listener("emulator-started", function(){ setStatus("Running"); });
   emulator.add_listener("emulator-stopped", function(){ setStatus("Stopped"); });
 
