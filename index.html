@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Titan1um - Windows 95 Emulator</title>
+<title>Titan1um - Web-based x86 Emulator</title>
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
   html, body {
@@ -16,15 +16,17 @@
     flex-wrap: wrap; font-size: 12px; flex-shrink: 0;
   }
   #topbar button, #topbar select, #topbar input[type=number] {
-    padding: 3px 8px; background: #222; color: #ddd;
+    padding: 4px 8px; background: #222; color: #ddd;
     border: 1px solid #444; cursor: pointer; font-size: 12px;
   }
+  #topbar button:hover:not(:disabled) { background: #333; border-color: #666; }
   #topbar button:disabled { opacity: 0.4; cursor: not-allowed; }
-  #topbar label { color: #888; }
+  #topbar label { color: #888; margin-left: 4px; }
   #brand { font-weight: bold; color: #4ea8de; letter-spacing: 1px; margin-right: 10px; font-size: 14px; }
-  #status { color: #888; margin-left: auto; }
+  #status { color: #aaa; margin-left: auto; font-weight: bold; }
   
-  #dl_toggle { padding: 3px 10px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; }
+  #dl_toggle { padding: 4px 10px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; }
+  #dl_toggle:hover { background: #333; }
   #dl_panel { display: none; background: #0a0a0a; border-bottom: 1px solid #333; flex-shrink: 0; height: 400px; }
   #dl_panel iframe { width: 100%; height: 100%; border: 0; display: block; }
   
@@ -45,66 +47,70 @@
   body.is-fullscreen #topbar { display: none; }
   body.is-fullscreen #screen_wrap { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; }
   
-  .cd-group { display: flex; align-items: center; gap: 4px; border-left: 1px solid #333; padding-left: 8px; margin-left: 4px; }
+  .cd-group { display: flex; align-items: center; gap: 4px; border-left: 1px solid #444; padding-left: 8px; margin-left: 4px; }
   .hidden-file { display: none; }
   .file-btn {
-    padding: 3px 8px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; font-family: monospace;
+    padding: 4px 8px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; font-family: monospace;
   }
+  .file-btn:hover { background: #333; border-color: #666; }
 </style>
 </head>
 <body>
   
   <div id="topbar">
-    <div id="brand">Titan1um <span style="color:#ff5555; font-size:10px; margin-left:5px;">(Offline Mode)</span></div>
+    <div id="brand" title="Titan1um Emulator">Titan1um</div>
     
-    <label>System:</label>
-    <select id="os_preset">
+    <label>OS:</label>
+    <select id="os_preset" title="Select OS profile (affects RAM and ACPI settings)">
       <option value="win95">Windows 95 / 98</option>
       <option value="linux">Linux (CLI)</option>
       <option value="dos">DOS / KolibriOS</option>
     </select>
 
     <label>HDA:</label>
-    <button class="file-btn" onclick="document.getElementById('hda_file').click()">Choose File</button>
+    <button class="file-btn" onclick="document.getElementById('hda_file').click()" title="Select Hard Disk Image (HDA)">Choose File</button>
     <input type="file" id="hda_file" class="hidden-file" accept=".img,.iso,.bin">
-    <span id="hda_name" style="color:#888; font-size:11px; max-width:80px; overflow:hidden; text-overflow:ellipsis;">(none)</span>
+    <span id="hda_name" style="color:#4ea8de; font-size:11px; max-width:80px; overflow:hidden; text-overflow:ellipsis;" title="Current HDA Image">(none)</span>
 
-    <label>RAM:</label><input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px">MB
+    <label>RAM:</label>
+    <input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px" title="Memory size in MB (Win95 max 256MB)">
     
     <div class="cd-group">
       <label>Floppy:</label>
-      <button id="btn_fda_inject" class="file-btn">Inject</button>
-      <button id="btn_fda_eject" disabled>Eject</button>
+      <button id="btn_fda_inject" class="file-btn" title="Insert Floppy Image (.img / .ima)">Inject</button>
+      <button id="btn_fda_eject" disabled title="Eject Floppy">Eject</button>
       <input type="file" id="fda_file" class="hidden-file" accept=".img,.ima">
       <span id="fda_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
     </div>
 
     <div class="cd-group">
       <label>CD 1:</label>
-      <button id="btn_cd1_inject" class="file-btn">Inject</button>
-      <button id="btn_cd1_eject" disabled>Eject</button>
+      <button id="btn_cd1_inject" class="file-btn" title="Insert CD-ROM Image (.iso) into Slot 1">Inject</button>
+      <button id="btn_cd1_eject" disabled title="Eject CD from Slot 1">Eject</button>
       <input type="file" id="cd1_file" class="hidden-file" accept=".iso">
       <span id="cd1_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
     </div>
 
     <div class="cd-group">
       <label>CD 2:</label>
-      <button id="btn_cd2_inject" class="file-btn">Inject</button>
-      <button id="btn_cd2_eject" disabled>Eject</button>
+      <button id="btn_cd2_inject" class="file-btn" title="Insert CD-ROM Image (.iso) into Slot 2">Inject</button>
+      <button id="btn_cd2_eject" disabled title="Eject CD from Slot 2">Eject</button>
       <input type="file" id="cd2_file" class="hidden-file" accept=".iso">
       <span id="cd2_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
     </div>
 
-    <button id="btn_start" disabled>Start</button>
-    <button id="btn_pause" disabled>Pause</button>
-    <button id="btn_stop" disabled>Stop</button>
+    <button id="btn_start" disabled title="Power On / Resume Emulator">Start</button>
+    <button id="btn_pause" disabled title="Pause Emulator (Keeps RAM state)">Pause</button>
+    <button id="btn_stop" disabled title="Power Off Emulator">Stop</button>
+    <button id="btn_restart" disabled title="Hard Reset (Power Cycle - Safe)">Restart</button>
     
-    <button id="btn_save" disabled>Save State</button>
-    <input type="file" id="state_file" class="hidden-file" accept=".bin">
-    <button id="btn_load" disabled>Load State</button>
+    <button id="btn_save" disabled title="Download Snapshot (State + Disk) to your computer">Save State</button>
+    <input type="file" id="state_file" class="hidden-file" accept.=".bin">
+    <button id="btn_load" disabled title="Load Snapshot from local computer">Load State</button>
+    <button id="btn_export_hda" disabled title="Download modified Hard Disk Image (HDA) with all your files" style="color: #4ea8de; border-color: #4ea8de;">Export HDA</button>
     
-    <button id="btn_fullscreen">Theater Mode</button>
-    <button id="dl_toggle">Images & Games ▼</button>
+    <button id="btn_fullscreen" title="Toggle Fullscreen (Theater Mode)">Theater Mode</button>
+    <button id="dl_toggle" title="Download Games and OS Images">Images & Games ▼</button>
     <span id="status">Ready</span>
   </div>
 
@@ -128,8 +134,10 @@ var screenWrap = document.getElementById("screen_wrap");
 var btnStart = document.getElementById("btn_start");
 var btnPause = document.getElementById("btn_pause");
 var btnStop = document.getElementById("btn_stop");
+var btnRestart = document.getElementById("btn_restart");
 var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
+var btnExportHda = document.getElementById("btn_export_hda");
 var btnFullscreen = document.getElementById("btn_fullscreen");
 var hdaInput = document.getElementById("hda_file");
 var hdaName = document.getElementById("hda_name");
@@ -168,7 +176,7 @@ var currentProfile = PROFILES.win95;
 
 function setStatus(s){ statusEl.textContent = s; console.log("[Titan1um]", s); }
 function setButtons(enabled){
-  [btnStart, btnPause, btnStop, btnSave, btnLoad].forEach(function(b){ b.disabled = !enabled; });
+  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad, btnExportHda].forEach(function(b){ b.disabled = !enabled; });
 }
 function destroyEmulator(){
   if(!emulator) return;
@@ -271,7 +279,7 @@ hdaInput.addEventListener("change", function(){
   buildEmulator(false);
 });
 
-// ---- 构建模拟器 (无网络) ----
+// ---- 构建模拟器 ----
 function buildEmulator(autoStart){
   if(!currentHda){ setStatus("Please select an HDA image first."); return; }
   destroyEmulator();
@@ -297,7 +305,6 @@ function buildEmulator(autoStart){
   var cds = [];
   if (currentCd1) cds.push({ buffer: currentCd1 });
   if (currentCd2) cds.push({ buffer: currentCd2 });
-  
   if (cds.length > 0) {
     opts.cdrom = cds[0];
     if (cds.length > 1) opts.cdroms = cds;
@@ -325,9 +332,21 @@ function buildEmulator(autoStart){
 }
 
 // ---- 控制按钮 ----
-btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("Starting..."); }catch(e){ setStatus("Start failed: "+e.message); } } };
+btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("Running"); }catch(e){ setStatus("Start failed"); } } };
 btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } };
 btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Stopped"); }catch(e){} } };
+
+// 安全的硬复位
+btnRestart.onclick = function(){ 
+  if(emulator){ 
+    try{ 
+      emulator.restart(); 
+      setStatus("Hard Resetting..."); 
+    }catch(e){
+      setStatus("Reset failed");
+    } 
+  } 
+};
 
 // ---- State 下载 / 加载 ----
 btnSave.onclick = async function(){
@@ -356,8 +375,28 @@ stateInput.onchange = function(){
   fr.readAsArrayBuffer(stateInput.files[0]);
 };
 
+// ---- 扒下 HDA 镜像 ----
+btnExportHda.onclick = function(){
+  if(!emulator) return;
+  try {
+    var ide = emulator.v86.cpu.devices.ide;
+    if (!ide || !ide.primary || !ide.primary.master) throw new Error("HDA device not found.");
+    var buffer = ide.primary.master.buffer;
+    if (!buffer || buffer.length === 0) throw new Error("HDA buffer is empty.");
+
+    var a = document.createElement("a");
+    a.download = "exported_hda.img";
+    a.href = URL.createObjectURL(new Blob([buffer], { type: "application/octet-stream" }));
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setStatus("HDA Exported successfully (" + (buffer.length / 1024 / 1024).toFixed(2) + " MB)");
+  } catch(e) {
+    setStatus("Export failed: " + e.message);
+  }
+};
+
 updateSlotsUI();
-setStatus("Please select an HDA image");
+setStatus("Select an HDA image");
 </script>
 </body>
 </html>
