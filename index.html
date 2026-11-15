@@ -60,11 +60,17 @@
   <div id="topbar">
     <div id="brand" title="Titan1um Emulator">Titan1um</div>
     
-    <label>OS:</label>
-    <select id="os_preset" title="Select OS profile (affects RAM and ACPI settings)">
-      <option value="win95">Windows 95 / 98</option>
-      <option value="linux">Linux (CLI)</option>
-      <option value="dos">DOS / KolibriOS</option>
+    <label>Category:</label>
+    <select id="category_select" title="Select OS Category">
+      <option value="windows">Windows</option>
+      <option value="linux">Linux</option>
+      <option value="android">Android</option>
+      <option value="other">Other</option>
+    </select>
+
+    <label>Profile:</label>
+    <select id="os_preset" title="Select specific OS profile (affects RAM and ACPI settings)">
+      <!-- 动态加载 -->
     </select>
 
     <label>HDA:</label>
@@ -105,7 +111,7 @@
     <button id="btn_restart" disabled title="Hard Reset (Power Cycle - Safe)">Restart</button>
     
     <button id="btn_save" disabled title="Download Snapshot (State + Disk) to your computer">Save State</button>
-    <input type="file" id="state_file" class="hidden-file" accept.=".bin">
+    <input type="file" id="state_file" class="hidden-file" accept=".bin">
     <button id="btn_load" disabled title="Load Snapshot from local computer">Load State</button>
     <button id="btn_export_hda" disabled title="Download modified Hard Disk Image (HDA) with all your files" style="color: #4ea8de; border-color: #4ea8de;">Export HDA</button>
     
@@ -143,6 +149,7 @@ var hdaInput = document.getElementById("hda_file");
 var hdaName = document.getElementById("hda_name");
 var memInput = document.getElementById("mem_size");
 var stateInput = document.getElementById("state_file");
+var categorySelect = document.getElementById("category_select");
 var presetSelect = document.getElementById("os_preset");
 var dlToggle = document.getElementById("dl_toggle");
 var dlPanel = document.getElementById("dl_panel");
@@ -166,13 +173,62 @@ var currentHda = null;
 var currentFda = null;
 var currentCd1 = null;
 var currentCd2 = null;
+var currentProfile = null;
 
-var PROFILES = {
-  win95: { mem: 128, acpi: false },
-  linux: { mem: 256, acpi: true },
-  dos:   { mem: 64,  acpi: false }
+// ---- 系统预设数据库 ----
+var SYSTEMS = {
+  windows: [
+    { id: "win95", name: "Windows 95 / 98", mem: 128, acpi: false },
+    { id: "winxp", name: "Windows XP (Requires Standard PC)", mem: 512, acpi: false }
+  ],
+  linux: [
+    { id: "linux_cli", name: "Linux CLI (Alpine)", mem: 256, acpi: true }
+  ],
+  android: [
+    { id: "android_x86", name: "Android x86 4.4 (Experimental)", mem: 512, acpi: true }
+  ],
+  other: [
+    { id: "dos", name: "DOS / FreeDOS", mem: 64, acpi: false },
+    { id: "kolibrios", name: "KolibriOS", mem: 64, acpi: false }
+  ]
 };
-var currentProfile = PROFILES.win95;
+
+// ---- 动态渲染下拉菜单 ----
+function updateCategoryMenu() {
+  var cat = categorySelect.value;
+  presetSelect.innerHTML = "";
+  
+  var systems = SYSTEMS[cat] || [];
+  systems.forEach(function(sys) {
+    var opt = document.createElement("option");
+    opt.value = sys.id;
+    opt.textContent = sys.name;
+    opt.dataset.mem = sys.mem;
+    opt.dataset.acpi = sys.acpi;
+    presetSelect.appendChild(opt);
+  });
+
+  if (systems.length > 0) {
+    presetSelect.value = systems[0].id;
+    applyProfile(systems[0]);
+  }
+}
+
+function applyProfile(sysObj) {
+  currentProfile = sysObj;
+  memInput.value = sysObj.mem;
+  if (currentHda) buildEmulator(false);
+}
+
+// ---- 绑定 UI 事件 ----
+categorySelect.addEventListener("change", updateCategoryMenu);
+
+presetSelect.addEventListener("change", function() {
+  var cat = categorySelect.value;
+  var selectedId = presetSelect.value;
+  var sysObj = SYSTEMS[cat].find(function(s) { return s.id === selectedId; });
+  if (sysObj) applyProfile(sysObj);
+});
 
 function setStatus(s){ statusEl.textContent = s; console.log("[Titan1um]", s); }
 function setButtons(enabled){
@@ -245,14 +301,6 @@ document.addEventListener("fullscreenchange", function() {
   }
 });
 
-// ---- 预设切换 ----
-presetSelect.addEventListener("change", function(e){
-  var key = e.target.value;
-  currentProfile = PROFILES[key] || PROFILES.win95;
-  memInput.value = currentProfile.mem;
-  if(currentHda) buildEmulator(false);
-});
-
 // ---- 下载器面板 ----
 dlToggle.onclick = function(){
   var isOpen = dlPanel.style.display === "block";
@@ -269,7 +317,6 @@ function saveMemSetting(){
   localStorage.setItem("titan1um_mem", memInput.value);
 }
 memInput.addEventListener("change", saveMemSetting);
-loadMemSetting();
 
 // ---- 选 HDA ----
 hdaInput.addEventListener("change", function(){
@@ -286,13 +333,14 @@ function buildEmulator(autoStart){
   
   screenContainer.innerHTML = '<div style="white-space:pre;font:14px monospace;line-height:14px"></div><canvas style="display:none"></canvas>';
   
-  var memMB = parseInt(memInput.value, 10) || currentProfile.mem;
+  var memMB = parseInt(memInput.value, 10) || (currentProfile ? currentProfile.mem : 128);
+  var useAcpi = currentProfile ? currentProfile.acpi : false;
 
   var opts = {
     wasm_path: "v86.wasm",
     memory_size: memMB * 1024 * 1024,
     vga_memory_size: 8 * 1024 * 1024,
-    acpi: currentProfile.acpi,
+    acpi: useAcpi,
     screen_container: screenContainer,
     bios: { url: "seabios.bin" },
     vga_bios: { url: "vgabios.bin" },
@@ -336,7 +384,6 @@ btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("Run
 btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } };
 btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Stopped"); }catch(e){} } };
 
-// 安全的硬复位
 btnRestart.onclick = function(){ 
   if(emulator){ 
     try{ 
@@ -395,6 +442,8 @@ btnExportHda.onclick = function(){
   }
 };
 
+loadMemSetting();
+updateCategoryMenu();
 updateSlotsUI();
 setStatus("Select an HDA image");
 </script>
