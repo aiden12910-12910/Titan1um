@@ -15,7 +15,7 @@
     background: #111; border-bottom: 1px solid #333;
     flex-wrap: wrap; font-size: 12px; flex-shrink: 0;
   }
-  #topbar button, #topbar select, #topbar input[type=number] {
+  #topbar button, #topbar select, #topbar input[type=number], #topbar input[type=text] {
     padding: 4px 8px; background: #222; color: #ddd;
     border: 1px solid #444; cursor: pointer; font-size: 12px;
   }
@@ -53,6 +53,9 @@
     padding: 4px 8px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; font-family: monospace;
   }
   .file-btn:hover { background: #333; border-color: #666; }
+  
+  /* 自定义系统输入框默认隐藏 */
+  #custom_os_name { display: none; width: 120px; }
 </style>
 </head>
 <body>
@@ -69,9 +72,8 @@
     </select>
 
     <label>Profile:</label>
-    <select id="os_preset" title="Select specific OS profile (affects RAM and ACPI settings)">
-      <!-- 动态加载 -->
-    </select>
+    <select id="os_preset" title="Select specific OS profile"></select>
+    <input type="text" id="custom_os_name" placeholder="Custom OS Name" title="Enter custom OS name (e.g., Win2000)">
 
     <label>HDA:</label>
     <button class="file-btn" onclick="document.getElementById('hda_file').click()" title="Select Hard Disk Image (HDA)">Choose File</button>
@@ -79,7 +81,7 @@
     <span id="hda_name" style="color:#4ea8de; font-size:11px; max-width:80px; overflow:hidden; text-overflow:ellipsis;" title="Current HDA Image">(none)</span>
 
     <label>RAM:</label>
-    <input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px" title="Memory size in MB (Win95 max 256MB)">
+    <input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:60px" title="Memory size in MB">
     
     <div class="cd-group">
       <label>Floppy:</label>
@@ -151,6 +153,7 @@ var memInput = document.getElementById("mem_size");
 var stateInput = document.getElementById("state_file");
 var categorySelect = document.getElementById("category_select");
 var presetSelect = document.getElementById("os_preset");
+var customOsName = document.getElementById("custom_os_name");
 var dlToggle = document.getElementById("dl_toggle");
 var dlPanel = document.getElementById("dl_panel");
 
@@ -189,7 +192,8 @@ var SYSTEMS = {
   ],
   other: [
     { id: "dos", name: "DOS / FreeDOS", mem: 64, acpi: false },
-    { id: "kolibrios", name: "KolibriOS", mem: 64, acpi: false }
+    { id: "kolibrios", name: "KolibriOS", mem: 64, acpi: false },
+    { id: "custom", name: "Custom OS (User Defined)", mem: 128, acpi: false }
   ]
 };
 
@@ -197,6 +201,7 @@ var SYSTEMS = {
 function updateCategoryMenu() {
   var cat = categorySelect.value;
   presetSelect.innerHTML = "";
+  customOsName.style.display = "none";
   
   var systems = SYSTEMS[cat] || [];
   systems.forEach(function(sys) {
@@ -217,6 +222,15 @@ function updateCategoryMenu() {
 function applyProfile(sysObj) {
   currentProfile = sysObj;
   memInput.value = sysObj.mem;
+  
+  // 如果选的是自定义，显示输入框
+  if (sysObj.id === "custom") {
+    customOsName.style.display = "inline-block";
+    customOsName.focus();
+  } else {
+    customOsName.style.display = "none";
+  }
+
   if (currentHda) buildEmulator(false);
 }
 
@@ -307,16 +321,6 @@ dlToggle.onclick = function(){
   dlPanel.style.display = isOpen ? "none" : "block";
   dlToggle.textContent = isOpen ? "Images & Games ▼" : "Images & Games ▲";
 };
-
-// ---- 内存持久化 ----
-function loadMemSetting(){
-  var v = localStorage.getItem("titan1um_mem");
-  if(v) memInput.value = v;
-}
-function saveMemSetting(){
-  localStorage.setItem("titan1um_mem", memInput.value);
-}
-memInput.addEventListener("change", saveMemSetting);
 
 // ---- 选 HDA ----
 hdaInput.addEventListener("change", function(){
@@ -442,7 +446,6 @@ btnExportHda.onclick = function(){
   }
 };
 
-loadMemSetting();
 updateCategoryMenu();
 updateSlotsUI();
 setStatus("Select an HDA image");
