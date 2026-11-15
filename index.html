@@ -27,15 +27,6 @@
   #dl_toggle { padding: 3px 10px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; }
   #dl_panel { display: none; background: #0a0a0a; border-bottom: 1px solid #333; flex-shrink: 0; height: 400px; }
   #dl_panel iframe { width: 100%; height: 100%; border: 0; display: block; }
-
-  /* Dev Panel 样式 */
-  #dev_panel { display: none; background: #1a1a1a; border-bottom: 1px solid #4ea8de; padding: 10px; font-size: 12px; }
-  .dev-row { display: flex; gap: 10px; align-items: center; margin-bottom: 8px; }
-  .dev-status { padding: 2px 6px; border-radius: 4px; font-weight: bold; }
-  .status-unknown { background: #555; }
-  .status-online { background: #2e7d32; color: #fff; }
-  .status-offline { background: #c62828; color: #fff; }
-  .status-loading { background: #f9a825; color: #000; }
   
   #screen_wrap {
     flex: 1; display: flex; align-items: center; justify-content: center;
@@ -114,22 +105,8 @@
     <button id="btn_load" disabled>Load State</button>
     
     <button id="btn_fullscreen">Theater Mode</button>
-    <button id="btn_dev_toggle">Dev</button>
     <button id="dl_toggle">Images & Games ▼</button>
     <span id="status">Ready</span>
-  </div>
-
-  <!-- Dev Panel -->
-  <div id="dev_panel">
-    <div class="dev-row">
-      <strong>WISP Server:</strong>
-      <input type="text" id="wisp_url" value="https://titan1um-wisp.onrender.com/" style="padding: 3px; background: #222; color: #fff; border: 1px solid #444; flex: 1;">
-      <button id="btn_wisp_check">Check Status & Wake</button>
-      <span id="wisp_status" class="dev-status status-unknown">Unknown</span>
-    </div>
-    <div class="dev-row" style="color: #888; font-size: 11px;">
-      * Note: Render free tier sleeps after 15 mins. Clicking "Check Status" wakes it up.
-    </div>
   </div>
 
   <div id="dl_panel">
@@ -164,13 +141,11 @@ var presetSelect = document.getElementById("os_preset");
 var dlToggle = document.getElementById("dl_toggle");
 var dlPanel = document.getElementById("dl_panel");
 
-// Floppy 槽位
 var fdaInput = document.getElementById("fda_file");
 var fdaName = document.getElementById("fda_name");
 var btnFdaInject = document.getElementById("btn_fda_inject");
 var btnFdaEject = document.getElementById("btn_fda_eject");
 
-// CD 槽位
 var cd1Input = document.getElementById("cd1_file");
 var cd1Name = document.getElementById("cd1_name");
 var btnCd1Inject = document.getElementById("btn_cd1_inject");
@@ -180,13 +155,6 @@ var cd2Input = document.getElementById("cd2_file");
 var cd2Name = document.getElementById("cd2_name");
 var btnCd2Inject = document.getElementById("btn_cd2_inject");
 var btnCd2Eject = document.getElementById("btn_cd2_eject");
-
-// Dev Panel 元素
-var btnDevToggle = document.getElementById("btn_dev_toggle");
-var devPanel = document.getElementById("dev_panel");
-var wispUrlInput = document.getElementById("wisp_url");
-var btnWispCheck = document.getElementById("btn_wisp_check");
-var wispStatus = document.getElementById("wisp_status");
 
 var currentHda = null;
 var currentFda = null;
@@ -200,6 +168,8 @@ var PROFILES = {
 };
 var currentProfile = PROFILES.win95;
 
+var WISP_URL = "https://titan1um-wisp.onrender.com/";
+
 function setStatus(s){ statusEl.textContent = s; console.log("[Titan1um]", s); }
 function setButtons(enabled){
   [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad].forEach(function(b){ b.disabled = !enabled; });
@@ -210,41 +180,6 @@ function destroyEmulator(){
   emulator = null;
 }
 
-// ---- Dev Panel 逻辑 ----
-btnDevToggle.onclick = function() {
-  var isHidden = devPanel.style.display !== "block";
-  devPanel.style.display = isHidden ? "block" : "none";
-};
-
-btnWispCheck.onclick = function() {
-  var url = wispUrlInput.value;
-  if (!url) return;
-  
-  wispStatus.textContent = "Waking up...";
-  wispStatus.className = "dev-status status-loading";
-  
-  // 用 fetch 去 ping 一下服务，唤醒休眠的服务
-  fetch(url, { method: 'GET', mode: 'no-cors' })
-    .then(function() {
-      wispStatus.textContent = "Online";
-      wispStatus.className = "dev-status status-online";
-      setStatus("WISP Server is online.");
-    })
-    .catch(function() {
-      wispStatus.textContent = "Offline / Error";
-      wispStatus.className = "dev-status status-offline";
-    });
-};
-
-// 初始化时自动保存/加载 WISP 地址
-if (localStorage.getItem("titan1um_wisp_url")) {
-  wispUrlInput.value = localStorage.getItem("titan1um_wisp_url");
-}
-wispUrlInput.addEventListener("change", function() {
-  localStorage.setItem("titan1um_wisp_url", wispUrlInput.value);
-});
-
-// ---- 槽位状态更新 ----
 function updateSlotsUI() {
   fdaName.textContent = currentFda ? currentFda.name : "(empty)";
   btnFdaEject.disabled = !currentFda;
@@ -256,21 +191,15 @@ function updateSlotsUI() {
   btnCd2Eject.disabled = !currentCd2;
 }
 
-// ---- 挂载操作 ----
 btnFdaInject.onclick = function() { fdaInput.click(); };
 fdaInput.onchange = function() {
   if(!fdaInput.files.length) return;
   currentFda = fdaInput.files[0];
   updateSlotsUI();
-  setStatus("Floppy Injected: " + currentFda.name);
   if(currentHda) buildEmulator(true);
 };
 btnFdaEject.onclick = function() {
-  currentFda = null;
-  fdaInput.value = "";
-  updateSlotsUI();
-  setStatus("Floppy Ejected");
-  if(currentHda) buildEmulator(true);
+  currentFda = null; fdaInput.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(true);
 };
 
 btnCd1Inject.onclick = function() { cd1Input.click(); };
@@ -278,15 +207,10 @@ cd1Input.onchange = function() {
   if(!cd1Input.files.length) return;
   currentCd1 = cd1Input.files[0];
   updateSlotsUI();
-  setStatus("CD 1 Injected: " + currentCd1.name);
   if(currentHda) buildEmulator(true);
 };
 btnCd1Eject.onclick = function() {
-  currentCd1 = null;
-  cd1Input.value = "";
-  updateSlotsUI();
-  setStatus("CD 1 Ejected");
-  if(currentHda) buildEmulator(true);
+  currentCd1 = null; cd1Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(true);
 };
 
 btnCd2Inject.onclick = function() { cd2Input.click(); };
@@ -294,18 +218,12 @@ cd2Input.onchange = function() {
   if(!cd2Input.files.length) return;
   currentCd2 = cd2Input.files[0];
   updateSlotsUI();
-  setStatus("CD 2 Injected: " + currentCd2.name);
   if(currentHda) buildEmulator(true);
 };
 btnCd2Eject.onclick = function() {
-  currentCd2 = null;
-  cd2Input.value = "";
-  updateSlotsUI();
-  setStatus("CD 2 Ejected");
-  if(currentHda) buildEmulator(true);
+  currentCd2 = null; cd2Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(true);
 };
 
-// ---- 全屏 ----
 btnFullscreen.onclick = function() {
   if (!document.fullscreenElement) {
     if (screenWrap.requestFullscreen) screenWrap.requestFullscreen();
@@ -321,12 +239,10 @@ document.addEventListener("fullscreenchange", function() {
   }
 });
 
-// ---- 预设与面板切换 ----
 presetSelect.addEventListener("change", function(e){
   var key = e.target.value;
   currentProfile = PROFILES[key] || PROFILES.win95;
   memInput.value = currentProfile.mem;
-  setStatus("Profile: " + key);
   if(currentHda) buildEmulator(false);
 });
 
@@ -336,7 +252,6 @@ dlToggle.onclick = function(){
   dlToggle.textContent = isOpen ? "Images & Games ▼" : "Images & Games ▲";
 };
 
-// ---- 内存持久化 ----
 function loadMemSetting(){
   var v = localStorage.getItem("titan1um_mem");
   if(v) memInput.value = v;
@@ -347,16 +262,14 @@ function saveMemSetting(){
 memInput.addEventListener("change", saveMemSetting);
 loadMemSetting();
 
-// ---- 选 HDA ----
 hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
   hdaName.textContent = currentHda.name;
-  setStatus("Selected HDA: " + currentHda.name);
   buildEmulator(false);
 });
 
-// ---- 构建模拟器 (含网络配置) ----
+// 核心构建逻辑
 function buildEmulator(autoStart){
   if(!currentHda){ setStatus("Please select an HDA image first."); return; }
   destroyEmulator();
@@ -374,74 +287,61 @@ function buildEmulator(autoStart){
     bios: { url: "seabios.bin" },
     vga_bios: { url: "vgabios.bin" },
     hda: { buffer: currentHda },
-    autostart: false
+    autostart: false,
+    // 直接挂载网络！
+    net_device: {
+      type: "ne2k",
+      relay_url: WISP_URL.replace("https", "wss")
+    }
   };
 
-  // 挂载网络设备
-  var wispUrl = wispUrlInput.value.trim();
-  if (wispUrl) {
-    // 将 https:// 替换为 wss://
-    wispUrl = wispUrl.replace(/^http/, 'ws');
-    opts.net_device = {
-      type: "ne2k",
-      relay_url: wispUrl,
-      dns_method: "doh",
-      doh_server: "cloudflare-dns.com"
-    };
-  }
-
-  if (currentFda) {
-    opts.fda = { buffer: currentFda };
-  }
+  if (currentFda) opts.fda = { buffer: currentFda };
 
   var cds = [];
   if (currentCd1) cds.push({ buffer: currentCd1 });
   if (currentCd2) cds.push({ buffer: currentCd2 });
-  
   if (cds.length > 0) {
     opts.cdrom = cds[0];
-    if (cds.length > 1) {
-      opts.cdroms = cds;
-    }
+    if (cds.length > 1) opts.cdroms = cds;
   }
 
   try{
     emulator = new V86(opts);
   }catch(e){ 
-    setStatus("Build failed: " + e.message); 
-    console.error(e); 
-    return; 
+    setStatus("Build failed: " + e.message); return; 
   }
   
-  bindListeners();
-  setButtons(true);
-  setStatus("Created. Click Start.");
-  
-  if(autoStart){
-    emulator.add_listener("emulator-ready", function(){
-      try{ 
-        emulator.run(); 
-        setStatus("Starting..."); 
-      }catch(e){ 
-        setStatus("Start failed: " + e.message); 
-      }
-    });
-  }
-}
-
-function bindListeners(){
   emulator.add_listener("emulator-ready", function(){ setStatus("Ready"); });
   emulator.add_listener("emulator-started", function(){ setStatus("Running"); });
   emulator.add_listener("emulator-stopped", function(){ setStatus("Stopped"); });
+
+  setButtons(true);
+  setStatus("Created.");
+  
+  if(autoStart){
+    btnStart.onclick();
+  }
 }
 
-// ---- 控制按钮 ----
-btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("Starting..."); }catch(e){ setStatus("Start failed: "+e.message); } } };
+// 带有唤醒逻辑的启动按钮
+btnStart.onclick = async function(){
+  if(!emulator) return;
+  setStatus("Waking up WISP server (Wait 3s)...");
+  try {
+    // 强行 fetch 唤醒 Render，不用管跨域报错，发出去就行
+    await fetch(WISP_URL, { mode: 'no-cors' }).catch(function(){});
+    await new Promise(r => setTimeout(r, 3000)); // 等待 3 秒让服务器启动
+    emulator.run();
+    setStatus("Starting...");
+  } catch(e) {
+    setStatus("Start failed: " + e.message);
+  }
+};
+
 btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } };
 btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Stopped"); }catch(e){} } };
 btnRestart.onclick = function(){ if(emulator){ try{ emulator.restart(); setStatus("Restarting..."); }catch(e){} } };
 
-// ---- State 下载 / 加载 ----
 btnSave.onclick = async function(){
   if(!emulator) return;
   try{
@@ -451,8 +351,8 @@ btnSave.onclick = async function(){
     a.href = URL.createObjectURL(new Blob([state]));
     a.click();
     URL.revokeObjectURL(a.href);
-    setStatus("State saved (" + state.byteLength + " bytes)");
-  }catch(e){ setStatus("Save failed: " + e.message); }
+    setStatus("State saved");
+  }catch(e){ setStatus("Save failed"); }
 };
 
 btnLoad.onclick = function(){ stateInput.click(); };
