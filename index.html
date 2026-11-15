@@ -235,7 +235,6 @@ function applyProfile(sysObj) {
   } else {
     customOsName.style.display = "none";
   }
-  // 切换配置时，只静默重建，不启动
   if (currentHda) buildEmulator(false);
 }
 
@@ -268,7 +267,7 @@ function updateSlotsUI() {
   btnCd2Eject.disabled = !currentCd2;
 }
 
-// ---- 挂载操作 (全部改为 false) ----
+// ---- 挂载操作 (绝对不自动启动) ----
 btnFdaInject.onclick = function() { fdaInput.click(); };
 fdaInput.onchange = function() {
   if(!fdaInput.files.length) return;
@@ -302,7 +301,7 @@ btnCd2Eject.onclick = function() {
   currentCd2 = null; cd2Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(false);
 };
 
-// ---- 缩放控制核心逻辑 ----
+// ---- 缩放控制 ----
 function applyScale() {
   var canvas = document.getElementById("screen_container").querySelector("canvas");
   if (!canvas) return;
@@ -352,7 +351,7 @@ hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
   hdaName.textContent = currentHda.name;
-  buildEmulator(false); // 这里也绝对不能自动启动
+  buildEmulator(false); 
 });
 
 // ---- 构建模拟器 ----
@@ -374,7 +373,7 @@ function buildEmulator(autoStart){
     bios: { url: "seabios.bin" },
     vga_bios: { url: "vgabios.bin" },
     hda: { buffer: currentHda },
-    autostart: false // 明确关闭自动启动
+    autostart: false 
   };
 
   if (currentFda) opts.fda = { buffer: currentFda };
@@ -455,13 +454,26 @@ stateInput.onchange = function(){
 };
 
 // ---- 扒下 HDA 镜像 ----
-btnExportHda.onclick = function(){
+btnExportHda.onclick = async function(){
   if(!emulator) return;
   try {
-    var ide = emulator.v86.cpu.devices.ide;
-    if (!ide || !ide.primary || !ide.primary.master) throw new Error("HDA device not found.");
-    var buffer = ide.primary.master.buffer;
-    if (!buffer || buffer.length === 0) throw new Error("HDA buffer is empty.");
+    setStatus("Exporting HDA, please wait...");
+    
+    // 尝试去底层拿 buffer
+    var buffer = null;
+    try {
+      buffer = emulator.v86.cpu.devices.ide.primary.master.buffer;
+    } catch (e1) {
+      try {
+        buffer = emulator.v86.cpu.devices.ide.primary.master.get_buffer();
+      } catch (e2) {
+        throw new Error("Cannot access HDA buffer in this version of libv86.");
+      }
+    }
+
+    if (!buffer || buffer.length === 0) {
+      throw new Error("HDA buffer is empty. Try clicking Stop first.");
+    }
 
     var a = document.createElement("a");
     a.download = "exported_hda.img";
@@ -471,6 +483,7 @@ btnExportHda.onclick = function(){
     setStatus("HDA Exported successfully (" + (buffer.length / 1024 / 1024).toFixed(2) + " MB)");
   } catch(e) {
     setStatus("Export failed: " + e.message);
+    console.error(e);
   }
 };
 
