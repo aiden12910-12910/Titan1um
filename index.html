@@ -130,7 +130,6 @@
     <button id="btn_save" disabled title="Download Snapshot (State + Disk)">Save State</button>
     <input type="file" id="state_file" class="hidden-file" accept=".bin">
     <button id="btn_load" disabled title="Load Snapshot">Load State</button>
-    <button id="btn_export_hda" disabled title="Download modified Hard Disk Image (HDA)" style="color: #4ea8de; border-color: #4ea8de;">Export HDA</button>
     
     <button id="btn_fullscreen" title="Toggle Fullscreen">Theater Mode</button>
     <button id="dl_toggle" title="Download Games and OS Images">Images & Games ▼</button>
@@ -160,7 +159,6 @@ var btnStop = document.getElementById("btn_stop");
 var btnRestart = document.getElementById("btn_restart");
 var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
-var btnExportHda = document.getElementById("btn_export_hda");
 var btnFullscreen = document.getElementById("btn_fullscreen");
 var hdaInput = document.getElementById("hda_file");
 var hdaName = document.getElementById("hda_name");
@@ -248,7 +246,7 @@ presetSelect.addEventListener("change", function() {
 
 function setStatus(s){ statusEl.textContent = s; console.log("[Titan1um]", s); }
 function setButtons(enabled){
-  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad, btnExportHda].forEach(function(b){ b.disabled = !enabled; });
+  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad].forEach(function(b){ b.disabled = !enabled; });
 }
 function destroyEmulator(){
   if(!emulator) return;
@@ -267,7 +265,7 @@ function updateSlotsUI() {
   btnCd2Eject.disabled = !currentCd2;
 }
 
-// ---- 挂载操作 (绝对不自动启动) ----
+// ---- 挂载操作 (不自动启动) ----
 btnFdaInject.onclick = function() { fdaInput.click(); };
 fdaInput.onchange = function() {
   if(!fdaInput.files.length) return;
@@ -451,40 +449,6 @@ stateInput.onchange = function(){
     }catch(err){ setStatus("Restore failed: " + err.message); }
   };
   fr.readAsArrayBuffer(stateInput.files[0]);
-};
-
-// ---- 扒下 HDA 镜像 ----
-btnExportHda.onclick = async function(){
-  if(!emulator) return;
-  try {
-    setStatus("Exporting HDA, please wait...");
-    
-    // 尝试去底层拿 buffer
-    var buffer = null;
-    try {
-      buffer = emulator.v86.cpu.devices.ide.primary.master.buffer;
-    } catch (e1) {
-      try {
-        buffer = emulator.v86.cpu.devices.ide.primary.master.get_buffer();
-      } catch (e2) {
-        throw new Error("Cannot access HDA buffer in this version of libv86.");
-      }
-    }
-
-    if (!buffer || buffer.length === 0) {
-      throw new Error("HDA buffer is empty. Try clicking Stop first.");
-    }
-
-    var a = document.createElement("a");
-    a.download = "exported_hda.img";
-    a.href = URL.createObjectURL(new Blob([buffer], { type: "application/octet-stream" }));
-    a.click();
-    URL.revokeObjectURL(a.href);
-    setStatus("HDA Exported successfully (" + (buffer.length / 1024 / 1024).toFixed(2) + " MB)");
-  } catch(e) {
-    setStatus("Export failed: " + e.message);
-    console.error(e);
-  }
 };
 
 updateCategoryMenu();
