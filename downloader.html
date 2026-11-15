@@ -11,6 +11,7 @@
   a:hover{text-decoration:underline}
   .box{background:#000;border:1px solid #333;padding:12px;margin:12px 0}
   .hint{color:#888;font-size:12px}
+  .warning{background: #332200; border-left: 4px solid #ffaa00; padding: 12px; color: #ffcc66; margin-bottom: 16px;}
   ul { padding-left: 20px; margin: 8px 0; }
   li { margin-bottom: 6px; }
 </style>
@@ -18,37 +19,36 @@
 <body>
 <h1>Titan1um - Images & Tools</h1>
 
+<div class="warning">
+  <strong>⚠️ IMPORTANT NOTICE (Read before playing):</strong>
+  <ul>
+    <li><strong>No Internet:</strong> This emulator runs 100% locally. Win95 networking is disabled (no web browsing or online multiplayer).</li>
+    <li><strong>Never click "Restart" inside Windows 95:</strong> The v86 emulator will crash and lock up. If a game asks you to restart, click "No" or cancel. Instead, use the <strong>Save State</strong> button on the main page, refresh your browser, and load the State.</li>
+  </ul>
+</div>
+
 <h2>1. Download Windows 95 Image</h2>
 <div class="box">
-  <p>Go to the GitHub Release page to download the system image (click to view details, select the file manually):</p>
+  <p>Go to the GitHub Release page to download the system image:</p>
   <p><a href="https://github.com/aiden12910-12910/Windows95/releases/tag/img" target="_blank" rel="noopener">Open Release page (Tag: img) →</a></p>
   <p class="hint">Download `windows95.img`, then return to the main page and select it under "HDA".</p>
 </div>
 
-<h2>2. Linux Command Line (CLI)</h2>
+<h2>2. Classic Game ISOs (For CD Mounting)</h2>
 <div class="box">
-  <p>You can run a lightweight Linux command-line environment. Note: It does not have a graphical interface, no internet access, and cannot install extra packages like Python.</p>
+  <p>Want to play classic games? Get original CD images from the Internet Archive:</p>
   <ul>
-    <li><a href="https://dl-cdn.alpinelinux.org/alpine/v3.21/releases/x86/alpine-standard-3.21.3-x86.iso" target="_blank">Download Alpine Linux (x86 32-bit) →</a></li>
+    <li><a href="https://archive.org/details/win95_games" target="_blank">Windows 95 Classic Games Collection</a> - Solitaire, Minesweeper, etc.</li>
+    <li><a href="https://archive.org/details/RedAlert95" target="_blank">Red Alert 95</a> - Classic RTS.</li>
+    <li><a href="https://archive.org/details/doom95" target="_blank">DOOM 95</a> - The grandfather of FPS.</li>
+    <li><a href="https://archive.org/details/msdos_Sid_Meiers_Civilization_1991" target="_blank">Civilization 1</a> - Classic turn-based strategy.</li>
   </ul>
-  <p class="hint">Alpine is only ~200MB. Mount the ISO as HDA, set RAM to 256MB, and boot into a pure text terminal.</p>
+  <p class="hint">After downloading the `.iso`, click "Inject" on CD 1 in the main page and select the file.</p>
 </div>
 
-<h2>3. Classic Game ISOs (For CD Mounting)</h2>
+<h2>3. Folder to ISO Converter</h2>
 <div class="box">
-  <p>Want to play classic games? You can get original CD images from the Internet Archive (click to view the details page, select the `.iso` file from the list):</p>
-  <ul>
-    <li><a href="https://archive.org/details/win95_games" target="_blank">Windows 95 Classic Games Collection</a> - Includes Solitaire, Minesweeper, and more.</li>
-    <li><a href="https://archive.org/details/RedAlert95" target="_blank">Red Alert 95</a> - Classic RTS game, original CD image.</li>
-    <li><a href="https://archive.org/details/doom95" target="_blank">DOOM 95</a> - The grandfather of FPS, Windows 95 port.</li>
-    <li><a href="https://archive.org/details/msdos_Sid_Meiers_Civilization_1991" target="_blank">Civilization 1</a> - Classic turn-based strategy game.</li>
-  </ul>
-  <p class="hint">After downloading the `.iso`, click "Inject" on CD 1 in the main page and select the file. Then start Win95 and open "My Computer" to access the CD-ROM drive.</p>
-</div>
-
-<h2>4. Folder to ISO Converter</h2>
-<div class="box">
-  <p>If you have a folder with old games (including subdirectories), you can pack it into an `.iso` here for easy CD mounting.</p>
+  <p>If you have a folder with old games, pack it into an `.iso` here for easy CD mounting.</p>
   <p>
     <input type="file" id="iso_dir" webkitdirectory directory multiple style="color:#ddd">
     <button id="btn_build_iso" type="button" style="padding:4px 12px;background:#222;color:#ddd;border:1px solid #444;cursor:pointer;font-family:monospace">Build ISO</button>
