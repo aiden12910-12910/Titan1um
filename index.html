@@ -55,7 +55,7 @@
 <body>
   
   <div id="topbar">
-    <div id="brand">Titan1um</div>
+    <div id="brand">Titan1um <span style="color:#ff5555; font-size:10px; margin-left:5px;">(Offline Mode)</span></div>
     
     <label>System:</label>
     <select id="os_preset">
@@ -98,7 +98,6 @@
     <button id="btn_start" disabled>Start</button>
     <button id="btn_pause" disabled>Pause</button>
     <button id="btn_stop" disabled>Stop</button>
-    <button id="btn_restart" disabled>Restart</button>
     
     <button id="btn_save" disabled>Save State</button>
     <input type="file" id="state_file" class="hidden-file" accept=".bin">
@@ -129,7 +128,6 @@ var screenWrap = document.getElementById("screen_wrap");
 var btnStart = document.getElementById("btn_start");
 var btnPause = document.getElementById("btn_pause");
 var btnStop = document.getElementById("btn_stop");
-var btnRestart = document.getElementById("btn_restart");
 var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
 var btnFullscreen = document.getElementById("btn_fullscreen");
@@ -168,11 +166,9 @@ var PROFILES = {
 };
 var currentProfile = PROFILES.win95;
 
-var WISP_URL = "https://titan1um-wisp.onrender.com/";
-
 function setStatus(s){ statusEl.textContent = s; console.log("[Titan1um]", s); }
 function setButtons(enabled){
-  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad].forEach(function(b){ b.disabled = !enabled; });
+  [btnStart, btnPause, btnStop, btnSave, btnLoad].forEach(function(b){ b.disabled = !enabled; });
 }
 function destroyEmulator(){
   if(!emulator) return;
@@ -191,6 +187,7 @@ function updateSlotsUI() {
   btnCd2Eject.disabled = !currentCd2;
 }
 
+// ---- 挂载操作 ----
 btnFdaInject.onclick = function() { fdaInput.click(); };
 fdaInput.onchange = function() {
   if(!fdaInput.files.length) return;
@@ -224,6 +221,7 @@ btnCd2Eject.onclick = function() {
   currentCd2 = null; cd2Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(true);
 };
 
+// ---- 全屏 ----
 btnFullscreen.onclick = function() {
   if (!document.fullscreenElement) {
     if (screenWrap.requestFullscreen) screenWrap.requestFullscreen();
@@ -239,6 +237,7 @@ document.addEventListener("fullscreenchange", function() {
   }
 });
 
+// ---- 预设切换 ----
 presetSelect.addEventListener("change", function(e){
   var key = e.target.value;
   currentProfile = PROFILES[key] || PROFILES.win95;
@@ -246,12 +245,14 @@ presetSelect.addEventListener("change", function(e){
   if(currentHda) buildEmulator(false);
 });
 
+// ---- 下载器面板 ----
 dlToggle.onclick = function(){
   var isOpen = dlPanel.style.display === "block";
   dlPanel.style.display = isOpen ? "none" : "block";
   dlToggle.textContent = isOpen ? "Images & Games ▼" : "Images & Games ▲";
 };
 
+// ---- 内存持久化 ----
 function loadMemSetting(){
   var v = localStorage.getItem("titan1um_mem");
   if(v) memInput.value = v;
@@ -262,6 +263,7 @@ function saveMemSetting(){
 memInput.addEventListener("change", saveMemSetting);
 loadMemSetting();
 
+// ---- 选 HDA ----
 hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
@@ -269,7 +271,7 @@ hdaInput.addEventListener("change", function(){
   buildEmulator(false);
 });
 
-// 核心构建逻辑
+// ---- 构建模拟器 (无网络) ----
 function buildEmulator(autoStart){
   if(!currentHda){ setStatus("Please select an HDA image first."); return; }
   destroyEmulator();
@@ -287,12 +289,7 @@ function buildEmulator(autoStart){
     bios: { url: "seabios.bin" },
     vga_bios: { url: "vgabios.bin" },
     hda: { buffer: currentHda },
-    autostart: false,
-    // 直接挂载网络！
-    net_device: {
-      type: "ne2k",
-      relay_url: WISP_URL.replace("https", "wss")
-    }
+    autostart: false
   };
 
   if (currentFda) opts.fda = { buffer: currentFda };
@@ -300,6 +297,7 @@ function buildEmulator(autoStart){
   var cds = [];
   if (currentCd1) cds.push({ buffer: currentCd1 });
   if (currentCd2) cds.push({ buffer: currentCd2 });
+  
   if (cds.length > 0) {
     opts.cdrom = cds[0];
     if (cds.length > 1) opts.cdroms = cds;
@@ -308,7 +306,8 @@ function buildEmulator(autoStart){
   try{
     emulator = new V86(opts);
   }catch(e){ 
-    setStatus("Build failed: " + e.message); return; 
+    setStatus("Build failed: " + e.message); 
+    return; 
   }
   
   emulator.add_listener("emulator-ready", function(){ setStatus("Ready"); });
@@ -316,32 +315,21 @@ function buildEmulator(autoStart){
   emulator.add_listener("emulator-stopped", function(){ setStatus("Stopped"); });
 
   setButtons(true);
-  setStatus("Created.");
+  setStatus("Created. Click Start.");
   
   if(autoStart){
-    btnStart.onclick();
+    emulator.add_listener("emulator-ready", function(){
+      try{ emulator.run(); setStatus("Starting..."); }catch(e){ setStatus("Start failed: " + e.message); }
+    });
   }
 }
 
-// 带有唤醒逻辑的启动按钮
-btnStart.onclick = async function(){
-  if(!emulator) return;
-  setStatus("Waking up WISP server (Wait 3s)...");
-  try {
-    // 强行 fetch 唤醒 Render，不用管跨域报错，发出去就行
-    await fetch(WISP_URL, { mode: 'no-cors' }).catch(function(){});
-    await new Promise(r => setTimeout(r, 3000)); // 等待 3 秒让服务器启动
-    emulator.run();
-    setStatus("Starting...");
-  } catch(e) {
-    setStatus("Start failed: " + e.message);
-  }
-};
-
+// ---- 控制按钮 ----
+btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("Starting..."); }catch(e){ setStatus("Start failed: "+e.message); } } };
 btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } };
 btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Stopped"); }catch(e){} } };
-btnRestart.onclick = function(){ if(emulator){ try{ emulator.restart(); setStatus("Restarting..."); }catch(e){} } };
 
+// ---- State 下载 / 加载 ----
 btnSave.onclick = async function(){
   if(!emulator) return;
   try{
@@ -352,7 +340,7 @@ btnSave.onclick = async function(){
     a.click();
     URL.revokeObjectURL(a.href);
     setStatus("State saved");
-  }catch(e){ setStatus("Save failed"); }
+  }catch(e){ setStatus("Save failed: " + e.message); }
 };
 
 btnLoad.onclick = function(){ stateInput.click(); };
