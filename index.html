@@ -10,11 +10,16 @@
     font-family: monospace; height: 100%; overflow: hidden;
     display: flex; flex-direction: column;
   }
+  
+  /* 顶部菜单（全屏模式下默认隐藏） */
   #topbar {
     display: flex; gap: 6px; align-items: center; padding: 6px 10px;
     background: #111; border-bottom: 1px solid #333;
     flex-wrap: wrap; font-size: 12px; flex-shrink: 0;
+    transition: transform 0.2s ease;
+    z-index: 10000;
   }
+  
   #topbar button, #topbar select, #topbar input[type=number], #topbar input[type=text] {
     padding: 4px 8px; background: #222; color: #ddd;
     border: 1px solid #444; cursor: pointer; font-size: 12px;
@@ -34,6 +39,7 @@
     flex: 1; display: flex; align-items: center; justify-content: center;
     background: #000; overflow: hidden; position: relative;
   }
+  
   #screen_container {
     white-space: pre; font: 14px monospace; line-height: 14px;
     display: flex; align-items: center; justify-content: center;
@@ -51,9 +57,21 @@
     max-width: 100%; max-height: 100%; object-fit: contain;
   }
 
-  body.is-fullscreen #topbar { display: none; }
-  body.is-fullscreen #screen_wrap { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; }
-  
+  /* ---- 全屏模式 (Theater Mode) 样式 ---- */
+  body.is-fullscreen #topbar {
+    position: fixed; top: -100px; left: 0; right: 0;
+  }
+  body.is-fullscreen #topbar:hover {
+    transform: translateY(100px); /* 鼠标移到顶部自动滑出 */
+  }
+  body.is-fullscreen #screen_wrap {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999;
+    cursor: none; /* 全屏默认隐藏鼠标 */
+  }
+  body.is-fullscreen.show-cursor #screen_wrap {
+    cursor: default; /* 按 Alt 键显示鼠标 */
+  }
+
   .cd-group { display: flex; align-items: center; gap: 4px; border-left: 1px solid #444; padding-left: 8px; margin-left: 4px; }
   .hidden-file { display: none; }
   .file-btn {
@@ -69,6 +87,7 @@
   <div id="topbar">
     <div id="brand" title="Titan1um Emulator">Titan1um</div>
     
+    <!-- 纯手动系统选择 -->
     <label>Category:</label>
     <select id="category_select" title="Select OS Category">
       <option value="windows">Windows</option>
@@ -91,39 +110,18 @@
 
     <label>Scale:</label>
     <select id="scale_select" title="Force integer scaling to keep text sharp">
-      <option value="fit">Fit (Smooth)</option>
+      <option value="fit">Fit</option>
       <option value="1">1x</option>
       <option value="2">2x</option>
       <option value="3">3x</option>
       <option value="4">4x</option>
     </select>
-    
-    <div class="cd-group">
-      <label>Floppy:</label>
-      <button id="btn_fda_inject" class="file-btn" title="Insert Floppy Image">Inject</button>
-      <button id="btn_fda_eject" disabled title="Eject Floppy">Eject</button>
-      <input type="file" id="fda_file" class="hidden-file" accept=".img,.ima">
-      <span id="fda_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
-    </div>
 
-    <div class="cd-group">
-      <label>CD 1:</label>
-      <button id="btn_cd1_inject" class="file-btn" title="Insert CD-ROM Image into Slot 1">Inject</button>
-      <button id="btn_cd1_eject" disabled title="Eject CD 1">Eject</button>
-      <input type="file" id="cd1_file" class="hidden-file" accept=".iso">
-      <span id="cd1_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
-    </div>
-
-    <div class="cd-group">
-      <label>CD 2:</label>
-      <button id="btn_cd2_inject" class="file-btn" title="Insert CD-ROM Image into Slot 2">Inject</button>
-      <button id="btn_cd2_eject" disabled title="Eject CD 2">Eject</button>
-      <input type="file" id="cd2_file" class="hidden-file" accept=".iso">
-      <span id="cd2_name" style="color:#4ea8de; max-width: 80px; overflow: hidden; text-overflow: ellipsis;">(empty)</span>
-    </div>
+    <!-- 动态渲染的 5 个 CD 槽位 -->
+    <div id="cd_slots_container" style="display:flex; gap:6px;"></div>
 
     <button id="btn_start" disabled title="Power On / Resume Emulator">Start</button>
-    <button id="btn_pause" disabled title="Pause Emulator">Pause</button>
+    <button id="btn_pause" disabled title="Pause Emulator (Freeze State)">Pause</button>
     <button id="btn_stop" disabled title="Power Off Emulator">Stop</button>
     <button id="btn_restart" disabled title="Hard Reset (Power Cycle)">Restart</button>
     
@@ -131,7 +129,7 @@
     <input type="file" id="state_file" class="hidden-file" accept=".bin">
     <button id="btn_load" disabled title="Load Snapshot">Load State</button>
     
-    <button id="btn_fullscreen" title="Toggle Fullscreen">Theater Mode</button>
+    <button id="btn_fullscreen" title="Toggle Fullscreen (Theater Mode)">Theater Mode</button>
     <button id="dl_toggle" title="Download Games and OS Images">Images & Games ▼</button>
     <span id="status">Ready</span>
   </div>
@@ -170,27 +168,20 @@ var customOsName = document.getElementById("custom_os_name");
 var scaleSelect = document.getElementById("scale_select");
 var dlToggle = document.getElementById("dl_toggle");
 var dlPanel = document.getElementById("dl_panel");
-
-var fdaInput = document.getElementById("fda_file");
-var fdaName = document.getElementById("fda_name");
-var btnFdaInject = document.getElementById("btn_fda_inject");
-var btnFdaEject = document.getElementById("btn_fda_eject");
-
-var cd1Input = document.getElementById("cd1_file");
-var cd1Name = document.getElementById("cd1_name");
-var btnCd1Inject = document.getElementById("btn_cd1_inject");
-var btnCd1Eject = document.getElementById("btn_cd1_eject");
-
-var cd2Input = document.getElementById("cd2_file");
-var cd2Name = document.getElementById("cd2_name");
-var btnCd2Inject = document.getElementById("btn_cd2_inject");
-var btnCd2Eject = document.getElementById("btn_cd2_eject");
+var cdSlotsContainer = document.getElementById("cd_slots_container");
 
 var currentHda = null;
 var currentFda = null;
-var currentCd1 = null;
-var currentCd2 = null;
 var currentProfile = null;
+
+// 5 个光驱槽位的数据与元素存储
+var cdSlots = [
+  { file: null, input: null, nameEl: null, btnEject: null },
+  { file: null, input: null, nameEl: null, btnEject: null },
+  { file: null, input: null, nameEl: null, btnEject: null },
+  { file: null, input: null, nameEl: null, btnEject: null },
+  { file: null, input: null, nameEl: null, btnEject: null }
+];
 
 var SYSTEMS = {
   windows: [
@@ -205,6 +196,69 @@ var SYSTEMS = {
     { id: "custom", name: "Custom OS", mem: 128, acpi: false }
   ]
 };
+
+// ---- 动态渲染 5 个光驱槽位 ----
+function renderCdSlots() {
+  cdSlotsContainer.innerHTML = "";
+  for (let i = 0; i < 5; i++) {
+    let slot = cdSlots[i];
+    let div = document.createElement("div");
+    div.className = "cd-group";
+    
+    let label = document.createElement("label");
+    label.textContent = "CD " + (i + 1) + ":";
+    
+    let btnInject = document.createElement("button");
+    btnInject.className = "file-btn";
+    btnInject.textContent = "Inject";
+    btnInject.title = "Insert CD-ROM Image into Slot " + (i + 1);
+    
+    let btnEject = document.createElement("button");
+    btnEject.textContent = "Eject";
+    btnEject.disabled = true;
+    btnEject.title = "Eject CD from Slot " + (i + 1);
+    
+    let input = document.createElement("input");
+    input.type = "file";
+    input.className = "hidden-file";
+    input.accept = ".iso";
+    
+    let nameEl = document.createElement("span");
+    nameEl.style.color = "#4ea8de";
+    nameEl.style.maxWidth = "60px";
+    nameEl.style.overflow = "hidden";
+    nameEl.style.textOverflow = "ellipsis";
+    nameEl.textContent = "(empty)";
+    
+    slot.input = input;
+    slot.nameEl = nameEl;
+    slot.btnEject = btnEject;
+    
+    // 事件绑定
+    btnInject.onclick = function() { input.click(); };
+    input.onchange = function() {
+      if(!input.files.length) return;
+      slot.file = input.files[0];
+      nameEl.textContent = slot.file.name;
+      btnEject.disabled = false;
+      if(currentHda) buildEmulator(false); // 热插拔重建
+    };
+    btnEject.onclick = function() {
+      slot.file = null;
+      input.value = "";
+      nameEl.textContent = "(empty)";
+      btnEject.disabled = true;
+      if(currentHda) buildEmulator(false);
+    };
+    
+    div.appendChild(label);
+    div.appendChild(btnInject);
+    div.appendChild(btnEject);
+    div.appendChild(input);
+    div.appendChild(nameEl);
+    cdSlotsContainer.appendChild(div);
+  }
+}
 
 function updateCategoryMenu() {
   var cat = categorySelect.value;
@@ -254,51 +308,6 @@ function destroyEmulator(){
   emulator = null;
 }
 
-function updateSlotsUI() {
-  fdaName.textContent = currentFda ? currentFda.name : "(empty)";
-  btnFdaEject.disabled = !currentFda;
-  
-  cd1Name.textContent = currentCd1 ? currentCd1.name : "(empty)";
-  btnCd1Eject.disabled = !currentCd1;
-
-  cd2Name.textContent = currentCd2 ? currentCd2.name : "(empty)";
-  btnCd2Eject.disabled = !currentCd2;
-}
-
-// ---- 挂载操作 (不自动启动) ----
-btnFdaInject.onclick = function() { fdaInput.click(); };
-fdaInput.onchange = function() {
-  if(!fdaInput.files.length) return;
-  currentFda = fdaInput.files[0];
-  updateSlotsUI();
-  if(currentHda) buildEmulator(false); 
-};
-btnFdaEject.onclick = function() {
-  currentFda = null; fdaInput.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(false);
-};
-
-btnCd1Inject.onclick = function() { cd1Input.click(); };
-cd1Input.onchange = function() {
-  if(!cd1Input.files.length) return;
-  currentCd1 = cd1Input.files[0];
-  updateSlotsUI();
-  if(currentHda) buildEmulator(false);
-};
-btnCd1Eject.onclick = function() {
-  currentCd1 = null; cd1Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(false);
-};
-
-btnCd2Inject.onclick = function() { cd2Input.click(); };
-cd2Input.onchange = function() {
-  if(!cd2Input.files.length) return;
-  currentCd2 = cd2Input.files[0];
-  updateSlotsUI();
-  if(currentHda) buildEmulator(false);
-};
-btnCd2Eject.onclick = function() {
-  currentCd2 = null; cd2Input.value = ""; updateSlotsUI(); if(currentHda) buildEmulator(false);
-};
-
 // ---- 缩放控制 ----
 function applyScale() {
   var canvas = document.getElementById("screen_container").querySelector("canvas");
@@ -321,7 +330,7 @@ function applyScale() {
 }
 scaleSelect.addEventListener("change", applyScale);
 
-// ---- 全屏 ----
+// ---- 全屏与全屏鼠标显示 ----
 btnFullscreen.onclick = function() {
   if (!document.fullscreenElement) {
     if (screenWrap.requestFullscreen) screenWrap.requestFullscreen();
@@ -334,6 +343,16 @@ document.addEventListener("fullscreenchange", function() {
     document.body.classList.add("is-fullscreen");
   } else {
     document.body.classList.remove("is-fullscreen");
+    document.body.classList.remove("show-cursor");
+  }
+});
+
+// 全屏时按下 Alt 键切换鼠标显示
+document.addEventListener("keydown", function(e) {
+  if (document.body.classList.contains("is-fullscreen")) {
+    if (e.key === "Alt" || e.key === "Escape" || e.key === "F1") { // 支持 Alt, Esc, F1
+      document.body.classList.toggle("show-cursor");
+    }
   }
 });
 
@@ -359,6 +378,7 @@ function buildEmulator(autoStart){
   
   screenContainer.innerHTML = '<div style="white-space:pre;font:14px monospace;line-height:14px"></div><canvas style="display:none"></canvas>';
   
+  // 纯手动 RAM（如果用户没有手填，才用预设保底）
   var memMB = parseInt(memInput.value, 10) || (currentProfile ? currentProfile.mem : 128);
   var useAcpi = currentProfile ? currentProfile.acpi : false;
 
@@ -376,12 +396,15 @@ function buildEmulator(autoStart){
 
   if (currentFda) opts.fda = { buffer: currentFda };
 
-  var cds = [];
-  if (currentCd1) cds.push({ buffer: currentCd1 });
-  if (currentCd2) cds.push({ buffer: currentCd2 });
-  if (cds.length > 0) {
-    opts.cdrom = cds[0];
-    if (cds.length > 1) opts.cdroms = cds;
+  // 收集 5 个槽位里的 CD
+  var activeCds = [];
+  for(let i = 0; i < 5; i++) {
+    if (cdSlots[i].file) activeCds.push({ buffer: cdSlots[i].file });
+  }
+  
+  if (activeCds.length > 0) {
+    opts.cdrom = activeCds[0];
+    if (activeCds.length > 1) opts.cdroms = activeCds;
   }
 
   try{
@@ -410,8 +433,28 @@ function buildEmulator(autoStart){
 
 // ---- 控制按钮 ----
 btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("Running"); }catch(e){ setStatus("Start failed"); } } };
-btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } };
-btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Stopped"); }catch(e){} } };
+
+// 真正的暂停（保留内存）
+btnPause.onclick = function(){ 
+  if(emulator){ 
+    try{ 
+      emulator.stop(); 
+      setStatus("Paused"); 
+    }catch(e){} 
+  } 
+};
+
+// 真正的关机（清空内存，如果要再开必须点 Start）
+btnStop.onclick = function(){ 
+  if(emulator){ 
+    try{ 
+      emulator.stop(); 
+      destroyEmulator();
+      setButtons(false);
+      setStatus("Stopped / Powered Off"); 
+    }catch(e){} 
+  } 
+};
 
 btnRestart.onclick = function(){ 
   if(emulator){ 
@@ -451,8 +494,8 @@ stateInput.onchange = function(){
   fr.readAsArrayBuffer(stateInput.files[0]);
 };
 
+renderCdSlots();
 updateCategoryMenu();
-updateSlotsUI();
 setStatus("Select an HDA image");
 </script>
 </body>
