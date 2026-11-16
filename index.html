@@ -102,13 +102,11 @@
 
     <label>HDA (C:):</label>
     <button class="file-btn" onclick="document.getElementById('hda_file').click()">Load</button>
-    <!-- 放开所有文件类型限制 -->
     <input type="file" id="hda_file" class="hidden-file">
     <span id="hda_name" style="color:#4ea8de; font-size:11px; max-width:60px; overflow:hidden; text-overflow:ellipsis;">(none)</span>
 
     <label>DATA (D:):</label>
     <button class="file-btn" onclick="document.getElementById('hdb_file').click()">Load</button>
-    <!-- 放开所有文件类型限制 -->
     <input type="file" id="hdb_file" class="hidden-file">
     <span id="hdb_name" style="color:#4ea8de; font-size:11px; max-width:60px; overflow:hidden; text-overflow:ellipsis;">(none)</span>
 
@@ -125,15 +123,14 @@
 
     <button id="btn_cd_menu" class="file-btn" title="Manage CD-ROMs">CDs (0/10)</button>
 
-    <!-- 初始不再 disabled，允许直接点 -->
     <button id="btn_start" title="Power On / Resume">Start</button>
-    <button id="btn_pause" disabled title="Pause">Pause</button>
-    <button id="btn_stop" disabled title="Power Off">Stop</button>
+    <button id="btn_pause" title="Pause">Pause</button>
+    <button id="btn_stop" title="Power Off">Stop</button>
     <button id="btn_restart" title="Apply Changes & Hard Reset">Restart</button>
     
-    <button id="btn_save" disabled title="Download State">Save State</button>
+    <button id="btn_save" title="Download State">Save State</button>
     <input type="file" id="state_file" class="hidden-file" accept=".bin">
-    <button id="btn_load" disabled title="Load State">Load State</button>
+    <button id="btn_load" title="Load State">Load State</button>
     
     <button id="btn_fullscreen" title="Toggle Fullscreen">Theater Mode</button>
     <button id="dl_toggle" title="Downloads">Images ▼</button>
@@ -227,7 +224,7 @@ function renderCdSlots() {
     let input = document.createElement("input");
     input.type = "file";
     input.className = "hidden-file";
-    // 彻底放开类型限制
+    
     let nameEl = document.createElement("span");
     nameEl.textContent = "(empty)";
     
@@ -300,9 +297,9 @@ presetSelect.addEventListener("change", function() {
   if (sysObj) applyProfile(sysObj);
 });
 
-// 只控制 Pause/Stop/Save 等，Start 和 Restart 不再受限
+// 彻底移除所有的按钮禁用逻辑，完全开放
 function setButtons(enabled){
-  [btnPause, btnStop, btnSave].forEach(function(b){ b.disabled = !enabled; });
+  // 空函数，保持兼容性，不锁定任何按钮
 }
 function destroyEmulator(){
   if(!emulator) return;
@@ -371,9 +368,7 @@ function buildEmulator(autoStart){
   
   screenContainer.innerHTML = '';
   
-  // 如果没选 HDA，给个 0 字节作为占位，强行让它开机找光盘或报错
   var hdaBuffer = currentHda || new Uint8Array(0);
-
   var memMB = parseInt(memInput.value, 10) || (currentProfile ? currentProfile.mem : 128);
 
   var opts = {
@@ -426,7 +421,6 @@ function buildEmulator(autoStart){
 
 // ---- 控制按钮 ----
 btnStart.onclick = function(){ 
-  // 如果还没有模拟器实例，或者刚刚 Stop 了，就自动 build 一次
   if(!emulator) {
     buildEmulator(true);
   } else {
@@ -443,7 +437,10 @@ btnRestart.onclick = function(){
 
 // ---- State ----
 btnSave.onclick = async function(){
-  if(!emulator) return;
+  if(!emulator) { 
+    setStatus("No active VM to save state from."); 
+    return; 
+  }
   try{
     var state = await emulator.save_state();
     var a = document.createElement("a");
@@ -452,16 +449,20 @@ btnSave.onclick = async function(){
     a.click();
     URL.revokeObjectURL(a.href);
     setStatus("State saved");
-  }catch(e){ setStatus("Save failed"); }
+  }catch(e){ setStatus("Save failed: " + e.message); }
 };
 
 btnLoad.onclick = function(){ stateInput.click(); };
 stateInput.onchange = function(){
-  if(!stateInput.files.length || !emulator) return;
+  if(!stateInput.files.length) return;
+  if(!emulator) {
+    setStatus("Please Start/Restart the VM first before loading state.");
+    return;
+  }
   var fr = new FileReader();
   fr.onload = async function(e){
     try{
-      await emulator.restoreState(e.target.result);
+      await emulator.restore_state(e.target.result);
       setStatus("State restored");
     }catch(err){ setStatus("Restore failed: " + err.message); }
   };
