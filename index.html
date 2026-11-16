@@ -190,11 +190,14 @@ var currentProfile = null;
 var cdSlots = Array.from({ length: 10 }, () => ({ file: null, input: null, nameEl: null, btnEject: null }));
 
 var SYSTEMS = {
-  windows: [{ id: "win95", name: "Windows 95 / 98", mem: 128, acpi: false }],
+  windows: [
+    { id: "win95", name: "Windows 95 / 98", mem: 128, acpi: false },
+    { id: "win2000", name: "Windows 2000 (Standard PC)", mem: 512, acpi: false },
+    { id: "winxp", name: "Windows XP (Standard PC)", mem: 512, acpi: false },
+  ],
   linux: [{ id: "linux_cli", name: "Linux CLI", mem: 256, acpi: true }],
   other: [
     { id: "dos", name: "DOS", mem: 64, acpi: false },
-    // 新增这一项：不挂 HDA，强制光盘启动
     { id: "boot_cd", name: "Boot from CD (No HDA)", mem: 128, acpi: false }
   ]
 };
