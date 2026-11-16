@@ -54,24 +54,34 @@
   #dl_panel { display: none; background: #0a0a0a; border-bottom: 1px solid #333; flex-shrink: 0; height: 400px; }
   #dl_panel iframe { width: 100%; height: 100%; border: 0; display: block; }
   
+  /* ---- 屏幕区域核心优化 ---- */
   #screen_wrap {
     flex: 1; display: flex; align-items: center; justify-content: center;
     background: #000; overflow: hidden; position: relative;
   }
   #screen_container {
-    white-space: pre; font: 14px monospace; line-height: 14px;
-    display: flex; align-items: center; justify-content: center;
     width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
   }
-  #screen_container > div { display: none; }
   
+  /* 彻底干掉 v86 原生的文本框后备层 */
+  #screen_container > div { 
+    display: none !important; 
+  }
+  
+  /* 强制像素级渲染，拒绝平滑拉伸 */
   #screen_container > canvas {
-    display: block; background: #000;
-    image-rendering: pixelated;
-    image-rendering: crisp-edges;
+    display: block;
+    background: #000;
+    /* 核心防糊代码 */
     image-rendering: -moz-crisp-edges;
     image-rendering: -webkit-optimize-contrast;
-    max-width: 100%; max-height: 100%; object-fit: contain;
+    image-rendering: crisp-edges;
+    image-rendering: pixelated;
+    /* 允许在容器内自动适配，但不做缩放插值 */
+    max-width: 100%; 
+    max-height: 100%; 
+    object-fit: contain;
   }
 
   body.is-fullscreen #topbar { position: fixed; top: -100px; left: 0; right: 0; }
@@ -114,13 +124,12 @@
 
     <label>Scale:</label>
     <select id="scale_select" title="Force integer scaling">
-      <option value="fit">Fit</option>
-      <option value="1">1x</option>
+      <option value="fit">Fit (Keep Aspect)</option>
+      <option value="1">1x (Original)</option>
       <option value="2">2x</option>
       <option value="3">3x</option>
     </select>
 
-    <!-- CD 集中管理按钮 -->
     <button id="btn_cd_menu" class="file-btn" title="Manage CD-ROMs">CDs (0/10)</button>
 
     <button id="btn_start" disabled title="Power On / Resume">Start</button>
@@ -143,8 +152,7 @@
 
   <div id="screen_wrap">
     <div id="screen_container">
-      <div style="white-space:pre;font:14px monospace;line-height:14px"></div>
-      <canvas style="display:none"></canvas>
+      <!-- 这里的内容会被 JS 动态替换 -->
     </div>
   </div>
 
@@ -191,7 +199,6 @@ var currentHda = null;
 var currentHdb = null;
 var currentProfile = null;
 
-// 10 个光驱槽位
 var cdSlots = Array.from({ length: 10 }, () => ({ file: null, input: null, nameEl: null, btnEject: null }));
 
 var SYSTEMS = {
@@ -206,7 +213,7 @@ function setStatus(s, isDirty) {
   console.log("[Titan1um]", s); 
 }
 
-// ---- 渲染 10 个光驱槽位到弹窗 ----
+// ---- 渲染 10 个光驱槽位 ----
 function renderCdSlots() {
   cdSlotsContainer.innerHTML = "";
   for (let i = 0; i < 10; i++) {
@@ -312,18 +319,25 @@ function destroyEmulator(){
   emulator = null;
 }
 
-// ---- 缩放 ----
+// ---- 缩放控制 (解决模糊的核心逻辑) ----
 function applyScale() {
-  var canvas = document.getElementById("screen_container").querySelector("canvas");
+  var canvas = screenContainer.querySelector("canvas");
   if (!canvas) return;
+  
   var scale = scaleSelect.value;
   if (scale === "fit") {
-    canvas.style.width = "100%"; canvas.style.height = "100%"; canvas.style.objectFit = "contain";
+    // 填满容器，但保持比例 (由 CSS object-fit: contain 保证)
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
   } else {
+    // 整数倍缩放，锁死像素点
     var multiplier = parseInt(scale);
-    canvas.style.width = ((canvas.width || 640) * multiplier) + "px";
-    canvas.style.height = ((canvas.height || 480) * multiplier) + "px";
-    canvas.style.objectFit = "none";
+    // 优先获取 v86 真实分辨率（如果没有就降级到 640x480）
+    var baseW = canvas.width || 640; 
+    var baseH = canvas.height || 480;
+    
+    canvas.style.width = (baseW * multiplier) + "px";
+    canvas.style.height = (baseH * multiplier) + "px";
   }
 }
 scaleSelect.addEventListener("change", applyScale);
@@ -343,14 +357,14 @@ document.addEventListener("keydown", function(e) {
   }
 });
 
-// ---- 下载器面板 ----
+// ---- 面板切换 ----
 dlToggle.onclick = function(){
   var isOpen = dlPanel.style.display === "block";
   dlPanel.style.display = isOpen ? "none" : "block";
   dlToggle.textContent = isOpen ? "Images ▼" : "Images ▲";
 };
 
-// ---- 挂载 HDA 和 HDB ----
+// ---- 挂载 HDA / HDB ----
 hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
@@ -370,7 +384,8 @@ function buildEmulator(autoStart){
   if(!currentHda){ setStatus("Please select HDA first."); return; }
   destroyEmulator();
   
-  screenContainer.innerHTML = '<div style="white-space:pre;font:14px monospace;line-height:14px"></div><canvas style="display:none"></canvas>';
+  // 重置画布容器
+  screenContainer.innerHTML = '';
   
   var memMB = parseInt(memInput.value, 10) || (currentProfile ? currentProfile.mem : 128);
 
@@ -451,7 +466,7 @@ stateInput.onchange = function(){
   var fr = new FileReader();
   fr.onload = async function(e){
     try{
-      await emulator.restore_state(e.target.result);
+      await emulator.restoreState(e.target.result);
       setStatus("State restored");
     }catch(err){ setStatus("Restore failed: " + err.message); }
   };
