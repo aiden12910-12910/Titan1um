@@ -54,7 +54,7 @@
   #dl_panel { display: none; background: #0a0a0a; border-bottom: 1px solid #333; flex-shrink: 0; height: 400px; }
   #dl_panel iframe { width: 100%; height: 100%; border: 0; display: block; }
   
-  /* ---- 屏幕区域核心优化 ---- */
+  /* ---- 屏幕区域 ---- */
   #screen_wrap {
     flex: 1; display: flex; align-items: center; justify-content: center;
     background: #000; overflow: hidden; position: relative;
@@ -64,24 +64,15 @@
     display: flex; align-items: center; justify-content: center;
   }
   
-  /* 彻底干掉 v86 原生的文本框后备层 */
-  #screen_container > div { 
-    display: none !important; 
-  }
+  #screen_container > div { display: none !important; }
   
-  /* 强制像素级渲染，拒绝平滑拉伸 */
   #screen_container > canvas {
-    display: block;
-    background: #000;
-    /* 核心防糊代码 */
+    display: block; background: #000;
     image-rendering: -moz-crisp-edges;
     image-rendering: -webkit-optimize-contrast;
     image-rendering: crisp-edges;
     image-rendering: pixelated;
-    /* 允许在容器内自动适配，但不做缩放插值 */
-    max-width: 100%; 
-    max-height: 100%; 
-    object-fit: contain;
+    max-width: 100%; max-height: 100%; object-fit: contain;
   }
 
   body.is-fullscreen #topbar { position: fixed; top: -100px; left: 0; right: 0; }
@@ -111,16 +102,18 @@
 
     <label>HDA (C:):</label>
     <button class="file-btn" onclick="document.getElementById('hda_file').click()">Load</button>
-    <input type="file" id="hda_file" class="hidden-file" accept=".img,.bin">
+    <!-- 放开所有文件类型限制 -->
+    <input type="file" id="hda_file" class="hidden-file">
     <span id="hda_name" style="color:#4ea8de; font-size:11px; max-width:60px; overflow:hidden; text-overflow:ellipsis;">(none)</span>
 
     <label>DATA (D:):</label>
     <button class="file-btn" onclick="document.getElementById('hdb_file').click()">Load</button>
-    <input type="file" id="hdb_file" class="hidden-file" accept=".img,.bin">
+    <!-- 放开所有文件类型限制 -->
+    <input type="file" id="hdb_file" class="hidden-file">
     <span id="hdb_name" style="color:#4ea8de; font-size:11px; max-width:60px; overflow:hidden; text-overflow:ellipsis;">(none)</span>
 
     <label>RAM:</label>
-    <input type="number" id="mem_size" value="128" min="16" max="512" step="16" style="width:50px" title="Memory size in MB">
+    <input type="number" id="mem_size" value="128" min="16" max="1024" step="16" style="width:50px" title="Memory size in MB">
 
     <label>Scale:</label>
     <select id="scale_select" title="Force integer scaling">
@@ -132,10 +125,11 @@
 
     <button id="btn_cd_menu" class="file-btn" title="Manage CD-ROMs">CDs (0/10)</button>
 
-    <button id="btn_start" disabled title="Power On / Resume">Start</button>
+    <!-- 初始不再 disabled，允许直接点 -->
+    <button id="btn_start" title="Power On / Resume">Start</button>
     <button id="btn_pause" disabled title="Pause">Pause</button>
     <button id="btn_stop" disabled title="Power Off">Stop</button>
-    <button id="btn_restart" disabled title="Apply Changes & Hard Reset">Restart</button>
+    <button id="btn_restart" title="Apply Changes & Hard Reset">Restart</button>
     
     <button id="btn_save" disabled title="Download State">Save State</button>
     <input type="file" id="state_file" class="hidden-file" accept=".bin">
@@ -151,12 +145,9 @@
   </div>
 
   <div id="screen_wrap">
-    <div id="screen_container">
-      <!-- 这里的内容会被 JS 动态替换 -->
-    </div>
+    <div id="screen_container"></div>
   </div>
 
-  <!-- CD 管理弹窗 -->
   <div id="cd_panel_overlay">
     <div id="cd_panel">
       <h3>CD-ROM Slots</h3>
@@ -236,8 +227,7 @@ function renderCdSlots() {
     let input = document.createElement("input");
     input.type = "file";
     input.className = "hidden-file";
-    input.accept = ".iso";
-    
+    // 彻底放开类型限制
     let nameEl = document.createElement("span");
     nameEl.textContent = "(empty)";
     
@@ -310,8 +300,9 @@ presetSelect.addEventListener("change", function() {
   if (sysObj) applyProfile(sysObj);
 });
 
+// 只控制 Pause/Stop/Save 等，Start 和 Restart 不再受限
 function setButtons(enabled){
-  [btnStart, btnPause, btnStop, btnRestart, btnSave, btnLoad].forEach(function(b){ b.disabled = !enabled; });
+  [btnPause, btnStop, btnSave].forEach(function(b){ b.disabled = !enabled; });
 }
 function destroyEmulator(){
   if(!emulator) return;
@@ -319,23 +310,18 @@ function destroyEmulator(){
   emulator = null;
 }
 
-// ---- 缩放控制 (解决模糊的核心逻辑) ----
+// ---- 缩放控制 ----
 function applyScale() {
   var canvas = screenContainer.querySelector("canvas");
   if (!canvas) return;
   
   var scale = scaleSelect.value;
   if (scale === "fit") {
-    // 填满容器，但保持比例 (由 CSS object-fit: contain 保证)
-    canvas.style.width = "100%";
-    canvas.style.height = "100%";
+    canvas.style.width = "100%"; canvas.style.height = "100%";
   } else {
-    // 整数倍缩放，锁死像素点
     var multiplier = parseInt(scale);
-    // 优先获取 v86 真实分辨率（如果没有就降级到 640x480）
     var baseW = canvas.width || 640; 
     var baseH = canvas.height || 480;
-    
     canvas.style.width = (baseW * multiplier) + "px";
     canvas.style.height = (baseH * multiplier) + "px";
   }
@@ -381,12 +367,13 @@ hdbInput.addEventListener("change", function(){
 
 // ---- 构建模拟器 ----
 function buildEmulator(autoStart){
-  if(!currentHda){ setStatus("Please select HDA first."); return; }
   destroyEmulator();
   
-  // 重置画布容器
   screenContainer.innerHTML = '';
   
+  // 如果没选 HDA，给个 0 字节作为占位，强行让它开机找光盘或报错
+  var hdaBuffer = currentHda || new Uint8Array(0);
+
   var memMB = parseInt(memInput.value, 10) || (currentProfile ? currentProfile.mem : 128);
 
   var opts = {
@@ -397,7 +384,7 @@ function buildEmulator(autoStart){
     screen_container: screenContainer,
     bios: { url: "seabios.bin" },
     vga_bios: { url: "vgabios.bin" },
-    hda: { buffer: currentHda },
+    hda: { buffer: hdaBuffer },
     autostart: false 
   };
 
@@ -438,7 +425,15 @@ function buildEmulator(autoStart){
 }
 
 // ---- 控制按钮 ----
-btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("Running"); }catch(e){ setStatus("Start failed"); } } };
+btnStart.onclick = function(){ 
+  // 如果还没有模拟器实例，或者刚刚 Stop 了，就自动 build 一次
+  if(!emulator) {
+    buildEmulator(true);
+  } else {
+    try{ emulator.run(); setStatus("Running"); }catch(e){ setStatus("Start failed"); } 
+  }
+};
+
 btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } };
 btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); destroyEmulator(); setButtons(false); setStatus("Powered Off"); }catch(e){} } };
 
@@ -476,7 +471,7 @@ stateInput.onchange = function(){
 renderCdSlots();
 updateCdMenuText();
 updateCategoryMenu();
-setStatus("Select HDA image");
+setStatus("Select HDA image or CD to boot");
 </script>
 </body>
 </html>
