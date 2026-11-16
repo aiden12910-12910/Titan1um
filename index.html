@@ -27,17 +27,32 @@
   #topbar button:disabled { opacity: 0.4; cursor: not-allowed; }
   #topbar label { color: #888; margin-left: 4px; }
   #brand { font-weight: bold; color: #4ea8de; letter-spacing: 1px; margin-right: 10px; font-size: 14px; }
-  #status { color: #ffaa00; margin-left: auto; font-weight: bold; } /* 状态栏改成橙色，更醒目 */
+  #status { color: #ffaa00; margin-left: auto; font-weight: bold; }
+  
+  /* CD 弹出面板 */
+  #cd_panel_overlay {
+    display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.7); z-index: 20000;
+    align-items: center; justify-content: center;
+  }
+  #cd_panel {
+    background: #111; border: 1px solid #444; border-radius: 8px;
+    padding: 16px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+  }
+  #cd_panel h3 { margin: 0 0 12px 0; color: #4ea8de; font-size: 14px; border-bottom: 1px solid #333; padding-bottom: 8px;}
+  
+  .cd-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 0; border-bottom: 1px solid #222;
+  }
+  .cd-row label { width: 50px; color: #888; }
+  .cd-row span { flex: 1; color: #4ea8de; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
   
   #dl_toggle { padding: 4px 10px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 12px; }
   #dl_toggle:hover { background: #333; }
   #dl_panel { display: none; background: #0a0a0a; border-bottom: 1px solid #333; flex-shrink: 0; height: 400px; }
   #dl_panel iframe { width: 100%; height: 100%; border: 0; display: block; }
-  
-  #cd_slots_container { 
-    display: flex; gap: 4px; overflow-x: auto; max-width: 100%; 
-    padding-bottom: 2px;
-  }
   
   #screen_wrap {
     flex: 1; display: flex; align-items: center; justify-content: center;
@@ -64,10 +79,9 @@
   body.is-fullscreen #screen_wrap { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 9999; cursor: none; }
   body.is-fullscreen.show-cursor #screen_wrap { cursor: default; }
 
-  .cd-group { display: flex; align-items: center; gap: 2px; border-left: 1px solid #444; padding-left: 4px; }
   .hidden-file { display: none; }
   .file-btn {
-    padding: 2px 6px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 11px; font-family: monospace;
+    padding: 4px 8px; background: #222; color: #ddd; border: 1px solid #444; cursor: pointer; font-size: 11px; font-family: monospace;
   }
   .file-btn:hover { background: #333; border-color: #666; }
 </style>
@@ -86,12 +100,12 @@
     <select id="os_preset" title="Select specific OS profile"></select>
 
     <label>HDA (C:):</label>
-    <button class="file-btn" onclick="document.getElementById('hda_file').click()" title="System Disk (Read-Only)">Load</button>
+    <button class="file-btn" onclick="document.getElementById('hda_file').click()">Load</button>
     <input type="file" id="hda_file" class="hidden-file" accept=".img,.bin">
     <span id="hda_name" style="color:#4ea8de; font-size:11px; max-width:60px; overflow:hidden; text-overflow:ellipsis;">(none)</span>
 
     <label>DATA (D:):</label>
-    <button class="file-btn" onclick="document.getElementById('hdb_file').click()" title="Secondary Disk for Games (Read-Only)">Load</button>
+    <button class="file-btn" onclick="document.getElementById('hdb_file').click()">Load</button>
     <input type="file" id="hdb_file" class="hidden-file" accept=".img,.bin">
     <span id="hdb_name" style="color:#4ea8de; font-size:11px; max-width:60px; overflow:hidden; text-overflow:ellipsis;">(none)</span>
 
@@ -106,8 +120,8 @@
       <option value="3">3x</option>
     </select>
 
-    <!-- 动态渲染的 10 个 CD 槽位 -->
-    <div id="cd_slots_container"></div>
+    <!-- CD 集中管理按钮 -->
+    <button id="btn_cd_menu" class="file-btn" title="Manage CD-ROMs">CDs (0/10)</button>
 
     <button id="btn_start" disabled title="Power On / Resume">Start</button>
     <button id="btn_pause" disabled title="Pause">Pause</button>
@@ -134,6 +148,17 @@
     </div>
   </div>
 
+  <!-- CD 管理弹窗 -->
+  <div id="cd_panel_overlay">
+    <div id="cd_panel">
+      <h3>CD-ROM Slots</h3>
+      <div id="cd_slots_container"></div>
+      <div style="text-align: right; margin-top: 12px;">
+        <button class="file-btn" onclick="document.getElementById('cd_panel_overlay').style.display='none'">Close</button>
+      </div>
+    </div>
+  </div>
+
 <script src="libv86.js"></script>
 <script>
 var emulator = null;
@@ -147,6 +172,7 @@ var btnRestart = document.getElementById("btn_restart");
 var btnSave = document.getElementById("btn_save");
 var btnLoad = document.getElementById("btn_load");
 var btnFullscreen = document.getElementById("btn_fullscreen");
+var btnCdMenu = document.getElementById("btn_cd_menu");
 var hdaInput = document.getElementById("hda_file");
 var hdaName = document.getElementById("hda_name");
 var hdbInput = document.getElementById("hdb_file");
@@ -159,6 +185,7 @@ var scaleSelect = document.getElementById("scale_select");
 var dlToggle = document.getElementById("dl_toggle");
 var dlPanel = document.getElementById("dl_panel");
 var cdSlotsContainer = document.getElementById("cd_slots_container");
+var cdPanelOverlay = document.getElementById("cd_panel_overlay");
 
 var currentHda = null;
 var currentHdb = null;
@@ -173,31 +200,30 @@ var SYSTEMS = {
   other: [{ id: "dos", name: "DOS", mem: 64, acpi: false }]
 };
 
-// ---- 状态提示 ----
 function setStatus(s, isDirty) { 
   statusEl.textContent = s; 
-  statusEl.style.color = isDirty ? "#ff5555" : "#aaa"; // 有改动时变红/橙
+  statusEl.style.color = isDirty ? "#ff5555" : "#aaa";
   console.log("[Titan1um]", s); 
 }
 
-// ---- 动态渲染 10 个光驱槽位 ----
+// ---- 渲染 10 个光驱槽位到弹窗 ----
 function renderCdSlots() {
   cdSlotsContainer.innerHTML = "";
   for (let i = 0; i < 10; i++) {
     let slot = cdSlots[i];
-    let div = document.createElement("div");
-    div.className = "cd-group";
+    let row = document.createElement("div");
+    row.className = "cd-row";
     
     let label = document.createElement("label");
-    label.textContent = "CD" + (i + 1) + ":";
+    label.textContent = "CD " + (i + 1) + ":";
     
     let btnInject = document.createElement("button");
     btnInject.className = "file-btn";
-    btnInject.textContent = "Inj";
+    btnInject.textContent = "Inject";
     
     let btnEject = document.createElement("button");
     btnEject.className = "file-btn";
-    btnEject.textContent = "Ejt";
+    btnEject.textContent = "Eject";
     btnEject.disabled = true;
     
     let input = document.createElement("input");
@@ -206,46 +232,48 @@ function renderCdSlots() {
     input.accept = ".iso";
     
     let nameEl = document.createElement("span");
-    nameEl.style.color = "#4ea8de";
-    nameEl.style.maxWidth = "40px";
-    nameEl.style.overflow = "hidden";
-    nameEl.style.textOverflow = "ellipsis";
-    nameEl.style.fontSize = "10px";
-    nameEl.textContent = "-";
+    nameEl.textContent = "(empty)";
     
     slot.input = input;
     slot.nameEl = nameEl;
     slot.btnEject = btnEject;
     
     btnInject.onclick = function() { input.click(); };
-    
-    // 光盘注入：只标记为脏数据，不重建！
     input.onchange = function() {
       if(!input.files.length) return;
       slot.file = input.files[0];
       nameEl.textContent = slot.file.name;
       btnEject.disabled = false;
-      setStatus("CD " + (i+1) + " changed. Press RESTART to apply.", true);
+      updateCdMenuText();
+      setStatus("CD " + (i+1) + " changed. Press RESTART.", true);
     };
-    
-    // 光盘弹出：同样只标记
     btnEject.onclick = function() {
       slot.file = null;
       input.value = "";
-      nameEl.textContent = "-";
+      nameEl.textContent = "(empty)";
       btnEject.disabled = true;
-      setStatus("CD " + (i+1) + " ejected. Press RESTART to apply.", true);
+      updateCdMenuText();
+      setStatus("CD " + (i+1) + " ejected. Press RESTART.", true);
     };
     
-    div.appendChild(label);
-    div.appendChild(btnInject);
-    div.appendChild(btnEject);
-    div.appendChild(input);
-    div.appendChild(nameEl);
-    cdSlotsContainer.appendChild(div);
+    row.appendChild(label);
+    row.appendChild(btnInject);
+    row.appendChild(btnEject);
+    row.appendChild(input);
+    row.appendChild(nameEl);
+    cdSlotsContainer.appendChild(row);
   }
 }
 
+function updateCdMenuText() {
+  let count = cdSlots.filter(s => s.file !== null).length;
+  btnCdMenu.textContent = `CDs (${count}/10)`;
+}
+
+btnCdMenu.onclick = function() { cdPanelOverlay.style.display = "flex"; };
+cdPanelOverlay.onclick = function(e) { if(e.target === this) this.style.display = "none"; };
+
+// ---- 系统预设 ----
 function updateCategoryMenu() {
   var cat = categorySelect.value;
   presetSelect.innerHTML = "";
@@ -265,7 +293,7 @@ function updateCategoryMenu() {
 function applyProfile(sysObj) {
   currentProfile = sysObj;
   memInput.value = sysObj.mem;
-  setStatus("Profile changed. Press RESTART to apply.", true);
+  setStatus("Profile changed. Press RESTART.", true);
 }
 
 categorySelect.addEventListener("change", updateCategoryMenu);
@@ -284,7 +312,7 @@ function destroyEmulator(){
   emulator = null;
 }
 
-// ---- 缩放控制 ----
+// ---- 缩放 ----
 function applyScale() {
   var canvas = document.getElementById("screen_container").querySelector("canvas");
   if (!canvas) return;
@@ -315,29 +343,29 @@ document.addEventListener("keydown", function(e) {
   }
 });
 
-// ---- 面板切换 ----
+// ---- 下载器面板 ----
 dlToggle.onclick = function(){
   var isOpen = dlPanel.style.display === "block";
   dlPanel.style.display = isOpen ? "none" : "block";
   dlToggle.textContent = isOpen ? "Images ▼" : "Images ▲";
 };
 
-// ---- 挂载 HDA 和 HDB（只标记状态） ----
+// ---- 挂载 HDA 和 HDB ----
 hdaInput.addEventListener("change", function(){
   if(!hdaInput.files.length) return;
   currentHda = hdaInput.files[0];
   hdaName.textContent = currentHda.name;
-  setStatus("HDA changed. Press RESTART to apply.", true); 
+  setStatus("HDA changed. Press RESTART.", true); 
 });
 
 hdbInput.addEventListener("change", function(){
   if(!hdbInput.files.length) return;
   currentHdb = hdbInput.files[0];
   hdbName.textContent = currentHdb.name;
-  setStatus("DATA disk changed. Press RESTART to apply.", true);
+  setStatus("DATA changed. Press RESTART.", true);
 });
 
-// ---- 构建模拟器（冷启动） ----
+// ---- 构建模拟器 ----
 function buildEmulator(autoStart){
   if(!currentHda){ setStatus("Please select HDA first."); return; }
   destroyEmulator();
@@ -399,9 +427,8 @@ btnStart.onclick = function(){ if(emulator){ try{ emulator.run(); setStatus("Run
 btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } };
 btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); destroyEmulator(); setButtons(false); setStatus("Powered Off"); }catch(e){} } };
 
-// Restart 按钮：冷启动并应用所有更改
 btnRestart.onclick = function(){ 
-  buildEmulator(true); // true 表示重建后自动点 Start
+  buildEmulator(true);
 };
 
 // ---- State ----
@@ -432,6 +459,7 @@ stateInput.onchange = function(){
 };
 
 renderCdSlots();
+updateCdMenuText();
 updateCategoryMenu();
 setStatus("Select HDA image");
 </script>
