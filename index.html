@@ -192,7 +192,11 @@ var cdSlots = Array.from({ length: 10 }, () => ({ file: null, input: null, nameE
 var SYSTEMS = {
   windows: [{ id: "win95", name: "Windows 95 / 98", mem: 128, acpi: false }],
   linux: [{ id: "linux_cli", name: "Linux CLI", mem: 256, acpi: true }],
-  other: [{ id: "dos", name: "DOS", mem: 64, acpi: false }]
+  other: [
+    { id: "dos", name: "DOS", mem: 64, acpi: false },
+    // 新增这一项：不挂 HDA，强制光盘启动
+    { id: "boot_cd", name: "Boot from CD (No HDA)", mem: 128, acpi: false }
+  ]
 };
 
 function setStatus(s, isDirty) { 
@@ -297,9 +301,8 @@ presetSelect.addEventListener("change", function() {
   if (sysObj) applyProfile(sysObj);
 });
 
-// 彻底移除所有的按钮禁用逻辑，完全开放
 function setButtons(enabled){
-  // 空函数，保持兼容性，不锁定任何按钮
+  // 完全放开限制
 }
 function destroyEmulator(){
   if(!emulator) return;
@@ -365,10 +368,14 @@ hdbInput.addEventListener("change", function(){
 // ---- 构建模拟器 ----
 function buildEmulator(autoStart){
   destroyEmulator();
-  
   screenContainer.innerHTML = '';
   
-  var hdaBuffer = currentHda || new Uint8Array(0);
+  // 核心逻辑：如果选了 boot_cd 且没挂 HDA，塞一个空盘给它
+  var hdaBuffer = currentHda;
+  if (!hdaBuffer && currentProfile && currentProfile.id === "boot_cd") {
+    hdaBuffer = new Uint8Array(0); // 塞个 0 字节的占位空盘
+  }
+
   var memMB = parseInt(memInput.value, 10) || (currentProfile ? currentProfile.mem : 128);
 
   var opts = {
@@ -379,7 +386,7 @@ function buildEmulator(autoStart){
     screen_container: screenContainer,
     bios: { url: "seabios.bin" },
     vga_bios: { url: "vgabios.bin" },
-    hda: { buffer: hdaBuffer },
+    hda: hdaBuffer ? { buffer: hdaBuffer } : undefined,
     autostart: false 
   };
 
@@ -409,7 +416,6 @@ function buildEmulator(autoStart){
   emulator.add_listener("emulator-started", function(){ setStatus("Running"); });
   emulator.add_listener("emulator-stopped", function(){ setStatus("Stopped"); });
 
-  setButtons(true);
   setStatus("Created. Click Start.");
   
   if(autoStart){
@@ -429,7 +435,7 @@ btnStart.onclick = function(){
 };
 
 btnPause.onclick = function(){ if(emulator){ try{ emulator.stop(); setStatus("Paused"); }catch(e){} } };
-btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); destroyEmulator(); setButtons(false); setStatus("Powered Off"); }catch(e){} } };
+btnStop.onclick = function(){ if(emulator){ try{ emulator.stop(); destroyEmulator(); setStatus("Powered Off"); }catch(e){} } };
 
 btnRestart.onclick = function(){ 
   buildEmulator(true);
